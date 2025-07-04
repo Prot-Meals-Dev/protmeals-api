@@ -67,15 +67,16 @@ model users {
   created_at      DateTime         @default(now()) @db.Timestamp(3)
   updated_at      DateTime         @default(now()) @updatedAt @db.Timestamp(3)
 
-  role            roles                  @relation(fields: [role_id], references: [id])
-  region          regions?               @relation(fields: [region_id], references: [id])
-  orders          orders[]
-  transactions    transactions[]
-  deliveryPartner daily_deliveries[]     @relation("PartnerDeliveries")
-  assignments     delivery_assignments[] @relation("PartnerAssignments")
-  assigned_by     delivery_assignments[] @relation("AssignedByUser")
-  otps            user_otps[]
-  created_coupons coupons[]              @relation("CreatedBy")
+  role             roles                  @relation(fields: [role_id], references: [id])
+  region           regions?               @relation(fields: [region_id], references: [id])
+  orders           orders[]
+  transactions     transactions[]
+  deliveryPartner  daily_deliveries[]     @relation("PartnerDeliveries")
+  assignments      delivery_assignments[] @relation("PartnerAssignments")
+  assigned_by      delivery_assignments[] @relation("AssignedByUser")
+  otps             user_otps[]
+  created_coupons  coupons[]              @relation("CreatedBy")
+  daily_deliveries daily_deliveries[]
 
   @@map("users")
 }
@@ -149,13 +150,16 @@ model order_meal_preferences {
 }
 
 model daily_deliveries {
-  id                      String   @id @default(uuid())
+  id                      String                    @id @default(uuid())
   delivery_partner_id     String
-  delivery_date           DateTime @db.Date
+  user_id                 String
+  delivery_date           DateTime                  @db.Date
+  status                  delivery_item_status_enum @default(pending)
   delivery_assignments_id String?
   sequence                Int
-  created_at              DateTime @default(now()) @db.Timestamp(3)
+  created_at              DateTime                  @default(now()) @db.Timestamp(3)
 
+  user       users                 @relation(fields: [user_id], references: [id])
   partner    users                 @relation("PartnerDeliveries", fields: [delivery_partner_id], references: [id])
   assignment delivery_assignments? @relation(fields: [delivery_assignments_id], references: [id])
 

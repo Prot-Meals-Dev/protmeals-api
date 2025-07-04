@@ -15,7 +15,7 @@ async function bootstrap() {
     '/api/webhooks/stripe',
     json({
       verify: (req: any, res, buf) => {
-        req.rawBody = buf; // 👈 Capture raw body here
+        req.rawBody = buf;
       },
     }),
   );
@@ -34,8 +34,6 @@ async function bootstrap() {
   );
 
   app.enableCors();
-
-  app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
   app.useGlobalInterceptors(new ResponseInterceptor());
 
   await app.listen(process.env.PORT || 3000);

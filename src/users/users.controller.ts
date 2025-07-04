@@ -13,7 +13,6 @@ import {
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
-import { ResponseService } from 'src/response/response.service';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
@@ -22,77 +21,87 @@ import { Public } from 'src/common/decorators/public.decorator';
 @Controller('users')
 @UseGuards(JwtAuthGuard)
 export class UsersController {
-  constructor(
-    private readonly usersService: UsersService,
-    private readonly responseService: ResponseService,
-  ) {}
+  constructor(private readonly usersService: UsersService) {}
 
   @Post()
   @UseGuards(RolesGuard)
   @Roles('admin')
-  async create(@Body() createUserDto: CreateUserDto) {
+  async create(@Request() req, @Body() createUserDto: CreateUserDto) {
     const user = await this.usersService.create(createUserDto);
-    return this.responseService.successResponse(
-      'User Created Sucessfully',
-      user,
-    );
+    req.responseMessage = 'User created successfully';
+    return user;
   }
 
   @Get()
   @UseGuards(RolesGuard)
   @Roles('admin')
-  async findAll(@Query('role') role?: string) {
-    if (role) {
-      return this.usersService.findByRole(role);
-    }
-    const users = await this.usersService.findAll();
-    return this.responseService.successResponse('Users Found', users);
+  async findAll(@Request() req, @Query('role') role?: string) {
+    const users = role
+      ? await this.usersService.findByRole(role)
+      : await this.usersService.findAll();
+    req.responseMessage = 'Users found';
+    return users;
   }
 
   @Get('roles')
   @Public()
   async getRoles(@Request() req) {
     const roles = await this.usersService.findallroles();
-    return this.responseService.successResponse('Roles Found', roles);
+    req.responseMessage = 'Roles found';
+    return roles;
   }
 
   @Get('staff')
   @UseGuards(RolesGuard)
   @Roles('admin')
-  async findAllStaff() {
+  async findAllStaff(@Request() req) {
     const staff = await this.usersService.findByRole('staff');
-    return this.responseService.successResponse('Staff Found', staff);
+    req.responseMessage = 'Staff found';
+    return staff;
   }
 
   @Get('profile')
   async getProfile(@Request() req) {
     const user = await this.usersService.findOne(req.user.id);
-    return this.responseService.successResponse('User Profile', user);
+    req.responseMessage = 'User profile found';
+    return user;
   }
 
   @Get(':id')
   @UseGuards(RolesGuard)
   @Roles('admin')
-  async findOne(@Param('id') id: string) {
-    return this.usersService.findOne(id);
+  async findOne(@Request() req, @Param('id') id: string) {
+    const user = await this.usersService.findOne(id);
+    req.responseMessage = 'User found';
+    return user;
   }
 
   @Patch('profile')
   async updateProfile(@Request() req, @Body() updateUserDto: UpdateUserDto) {
-    return this.usersService.update(req.user.id, updateUserDto);
+    const user = await this.usersService.update(req.user.id, updateUserDto);
+    req.responseMessage = 'Profile updated successfully';
+    return user;
   }
 
   @Patch(':id')
   @UseGuards(RolesGuard)
   @Roles('admin')
-  async update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
-    return this.usersService.update(id, updateUserDto);
+  async update(
+    @Request() req,
+    @Param('id') id: string,
+    @Body() updateUserDto: UpdateUserDto,
+  ) {
+    const updated = await this.usersService.update(id, updateUserDto);
+    req.responseMessage = 'User updated successfully';
+    return updated;
   }
 
   @Delete(':id')
   @UseGuards(RolesGuard)
   @Roles('admin')
-  async remove(@Param('id') id: string) {
-    return this.usersService.remove(id);
+  async remove(@Request() req, @Param('id') id: string) {
+    const result = await this.usersService.remove(id);
+    req.responseMessage = 'User deleted successfully';
+    return result;
   }
 }
