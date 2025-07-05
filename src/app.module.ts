@@ -10,6 +10,7 @@ import { FleetManagerModule } from './fleet-manager/fleet-manager.module';
 import { MealTypesModule } from './meal_types/meal_types.module';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { DeliveryAssignmentsModule } from './delivery-assignments/delivery-assignments.module';
 
 @Module({
   imports: [
@@ -24,6 +25,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     ScheduleModule.forRoot(),
     OrdersModule,
     MealTypesModule,
+    DeliveryAssignmentsModule,
     PrismaModule,
   ],
 })

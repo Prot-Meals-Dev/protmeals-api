@@ -18,7 +18,6 @@ export class OrdersService {
     const { date, paymentStatus, orderStatus, page = 1, limit = 10 } = filter;
 
     const skip = (page - 1) * limit;
-
     const where: any = {};
 
     if (date) {
