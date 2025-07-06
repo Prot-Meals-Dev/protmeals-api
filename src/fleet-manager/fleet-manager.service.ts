@@ -11,6 +11,7 @@ import { CreateCustomerOrderDto } from './dto/create-customer-order.dto';
 import { meal_type_enum } from '@prisma/client';
 import { OrdersService } from 'src/orders/orders.service';
 import { UpdateDeliverySequenceDto } from './dto/update-delivery-sequence.dto';
+import * as dayjs from 'dayjs';
 
 @Injectable()
 export class FleetManagerService {
@@ -260,5 +261,71 @@ export class FleetManagerService {
     }
 
     return { message: 'Sequence updated successfully' };
+  }
+
+  async getFleetManagerAnalytics(managerId: string) {
+    const today = dayjs().startOf('day').toDate();
+
+    // 1. Get region
+    const manager = await this.prisma.users.findUnique({
+      where: { id: managerId },
+      select: { region_id: true },
+    });
+
+    if (!manager?.region_id) {
+      throw new Error('Fleet manager must belong to a region');
+    }
+
+    // 2. Get deliveries for today in this region
+    const deliveries = await this.prisma.daily_deliveries.findMany({
+      where: {
+        delivery_date: today,
+        partner: {
+          region_id: manager.region_id,
+        },
+      },
+      include: {
+        assignment: {
+          select: { meal_type: true },
+        },
+      },
+    });
+
+    // 3. Count meal types
+    const mealCounts = {
+      breakfast: 0,
+      lunch: 0,
+      dinner: 0,
+    };
+
+    deliveries.forEach((delivery) => {
+      const meal = delivery.assignment?.meal_type;
+      if (meal) mealCounts[meal]++;
+    });
+
+    // 4. Count total delivery partners in region
+    const partnerCount = await this.prisma.users.count({
+      where: {
+        region_id: manager.region_id,
+        role: { name: 'delivery_partner' },
+      },
+    });
+
+    // 5. Count total orders in region
+    const orderCount = await this.prisma.orders.count({
+      where: {
+        user: {
+          region_id: manager.region_id,
+        },
+      },
+    });
+
+    return {
+      todayDate: today,
+      mealDeliveries: mealCounts,
+      totalDeliveryPartners: partnerCount,
+      totalOrders: orderCount,
+      totalDeliveriesToday: deliveries.length,
+    };
   }
 }

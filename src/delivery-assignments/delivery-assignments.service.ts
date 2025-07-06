@@ -85,4 +85,59 @@ export class DeliveryAssignmentsService {
       },
     });
   }
+
+  async getDeliveryPartnerAnalytics(partnerId: string) {
+    const today = dayjs().startOf('day').toDate();
+
+    const [totalAssigned, todayDeliveries, todayCompleted, breakdown] =
+      await Promise.all([
+        this.prisma.delivery_assignments.count({
+          where: { delivery_partner_id: partnerId },
+        }),
+
+        this.prisma.daily_deliveries.count({
+          where: {
+            delivery_partner_id: partnerId,
+            delivery_date: today,
+          },
+        }),
+
+        this.prisma.daily_deliveries.count({
+          where: {
+            delivery_partner_id: partnerId,
+            delivery_date: today,
+            status: 'delivered',
+          },
+        }),
+
+        this.prisma.delivery_assignments.groupBy({
+          by: ['meal_type'],
+          where: {
+            delivery_partner_id: partnerId,
+            order: {
+              start_date: { lte: today },
+              end_date: { gte: today },
+            },
+          },
+          _count: true,
+        }),
+      ]);
+
+    const breakdownObj = {
+      breakfast: 0,
+      lunch: 0,
+      dinner: 0,
+    };
+
+    breakdown.forEach((b) => {
+      breakdownObj[b.meal_type] = b._count;
+    });
+
+    return {
+      totalAssigned,
+      todayDeliveries,
+      todayCompleted,
+      breakdown: breakdownObj,
+    };
+  }
 }
