@@ -8,10 +8,8 @@ export class DeliveryAssignmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getPartnerDeliveries(partnerId: string, date?: string) {
-    const deliveryDate = dayjs(date ?? new Date())
-      .startOf('day')
-      .toDate();
-
+    const deliveryDate = new Date(date);
+    console.log(deliveryDate);
     return this.prisma.daily_deliveries.findMany({
       where: {
         delivery_partner_id: partnerId,

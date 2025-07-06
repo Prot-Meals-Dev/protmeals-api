@@ -1,10 +1,8 @@
-// delivery-cron.service.ts
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import * as dayjs from 'dayjs';
-
-const MAX_DAILY_CAPACITY = 10;
+import { meal_type_enum, order_status_enum } from '@prisma/client';
 
 @Injectable()
 export class DeliveryCronService {
@@ -12,109 +10,84 @@ export class DeliveryCronService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
-  async assignDailyDeliveries() {
+  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  async assignBreakfastDeliveries() {
+    await this.generateDailyDeliveries('breakfast');
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_10AM)
+  async assignLunchDeliveries() {
+    await this.generateDailyDeliveries('lunch');
+  }
+
+  @Cron(CronExpression.EVERY_DAY_AT_4PM)
+  async assignDinnerDeliveries() {
+    await this.generateDailyDeliveries('dinner');
+  }
+
+  private async generateDailyDeliveries(mealType: meal_type_enum) {
     const today = dayjs().startOf('day').toDate();
-    const weekday = today.getDay(); // 0 = Sunday
+    const weekday = dayjs().day(); // Sunday = 0
 
-    this.logger.log(`Starting delivery assignment for ${today.toDateString()}`);
+    this.logger.log(
+      `📦 Generating ${mealType} deliveries for ${today.toDateString()}`,
+    );
 
-    const orders = await this.prisma.orders.findMany({
+    const assignments = await this.prisma.delivery_assignments.findMany({
       where: {
-        status: 'active',
-        start_date: { lte: today },
-        end_date: { gte: today },
-        preferences: {
-          some: { week_day: weekday },
-        },
-        user: {
-          region_id: { not: null },
+        meal_type: mealType,
+        order: {
+          status: order_status_enum.active,
+          start_date: { lte: today },
+          end_date: { gte: today },
+          preferences: {
+            some: {
+              week_day: weekday,
+              [mealType]: true,
+            },
+          },
         },
       },
       include: {
-        user: true,
-        preferences: true,
-        meal_type: true,
+        order: true,
       },
     });
 
-    let sequence = 1;
+    this.logger.debug(
+      `Found ${assignments.length} valid ${mealType} assignments for today`,
+    );
 
-    for (const order of orders) {
-      const regionId = order.user.region_id!;
-      const partners = await this.prisma.users.findMany({
+    for (const assignment of assignments) {
+      const exists = await this.prisma.daily_deliveries.findFirst({
         where: {
-          role: { name: 'delivery_partner' },
-          status: 'active',
-          region_id: regionId,
+          delivery_assignments_id: assignment.id,
+          delivery_date: today,
         },
       });
 
-      // Get current delivery count per partner for today
-      const deliveriesToday = await this.prisma.daily_deliveries.groupBy({
-        by: ['delivery_partner_id'],
-        where: { delivery_date: today },
-        _count: true,
-      });
-
-      const partnerLoadMap = new Map<string, number>();
-      deliveriesToday.forEach((d) => {
-        partnerLoadMap.set(d.delivery_partner_id, d._count);
-      });
-
-      for (const pref of order.preferences) {
-        const meals: ('breakfast' | 'lunch' | 'dinner')[] = [];
-        if (pref.breakfast) meals.push('breakfast');
-        if (pref.lunch) meals.push('lunch');
-        if (pref.dinner) meals.push('dinner');
-
-        for (const meal of meals) {
-          // Find least loaded partner in this region
-          const eligiblePartner = partners.find((p) => {
-            const load = partnerLoadMap.get(p.id) ?? 0;
-            return load < MAX_DAILY_CAPACITY;
-          });
-
-          if (!eligiblePartner) {
-            this.logger.warn(
-              `No available partner for region ${regionId} on ${today} for meal ${meal}`,
-            );
-            continue;
-          }
-
-          // Create assignment and delivery
-          const assignment = await this.prisma.delivery_assignments.create({
-            data: {
-              order_id: order.id,
-              meal_id: order.meal_type_id!,
-              delivery_partner_id: eligiblePartner.id,
-              meal_type: meal,
-              sequence,
-            },
-          });
-
-          await this.prisma.daily_deliveries.create({
-            data: {
-              user_id: order.user_id,
-              delivery_partner_id: eligiblePartner.id,
-              delivery_date: today,
-              delivery_assignments_id: assignment.id,
-              sequence,
-            },
-          });
-
-          partnerLoadMap.set(
-            eligiblePartner.id,
-            (partnerLoadMap.get(eligiblePartner.id) ?? 0) + 1,
-          );
-
-          sequence++;
-        }
+      if (exists) {
+        this.logger.debug(
+          `🟡 Delivery already generated for assignment ${assignment.id}`,
+        );
+        continue;
       }
+
+      await this.prisma.daily_deliveries.create({
+        data: {
+          user_id: assignment.order.user_id,
+          delivery_partner_id: assignment.delivery_partner_id,
+          delivery_assignments_id: assignment.id,
+          delivery_date: today,
+          sequence: assignment.sequence,
+          status: 'pending', 
+        },
+      });
+
+      this.logger.log(
+        `✅ Created ${mealType} delivery for order ${assignment.order_id} → partner ${assignment.delivery_partner_id}`,
+      );
     }
 
-    this.logger.log(
-      `Completed delivery assignment with ${sequence - 1} entries.`,
-    );
+    this.logger.log(`🎯 Completed generating ${mealType} deliveries`);
   }
 }

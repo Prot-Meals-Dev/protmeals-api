@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   UseGuards,
+  Query,
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { CreateOrderDto } from './dto/create-order.dto';
@@ -23,8 +24,11 @@ export class OrdersController {
   }
 
   @Get()
-  findAll() {
-    return this.ordersService.findAll();
+  findAll(
+    @Query('deliveryPartnerId') deliveryPartnerId?: string,
+    @Query('mealType') mealType?: 'breakfast' | 'lunch' | 'dinner',
+  ) {
+    return this.ordersService.findAll({ deliveryPartnerId, mealType });
   }
 
   @Get(':id')

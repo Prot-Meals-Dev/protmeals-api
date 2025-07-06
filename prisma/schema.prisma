@@ -114,7 +114,7 @@ model meal_types {
 model orders {
   id               String            @id @default(uuid())
   user_id          String
-  order_id         String?
+  order_id         String?           @unique @db.VarChar(20)
   meal_type_id     String?
   delevery_address String?
   latitude         Decimal?          @db.Decimal(10, 6)
