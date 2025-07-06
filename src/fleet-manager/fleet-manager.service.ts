@@ -9,10 +9,15 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { AssignDeliveryDto } from './dto/assign-delivery.dto';
 import { CreateCustomerOrderDto } from './dto/create-customer-order.dto';
 import { meal_type_enum } from '@prisma/client';
+import { OrdersService } from 'src/orders/orders.service';
+import { UpdateDeliverySequenceDto } from './dto/update-delivery-sequence.dto';
 
 @Injectable()
 export class FleetManagerService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private ordersService: OrdersService,
+  ) {}
 
   async createDeliveryPartner(dto: CreatePartnerDto, fleetManagerId: string) {
     const userExist = await this.prisma.users.findFirst({
@@ -47,19 +52,44 @@ export class FleetManagerService {
     });
   }
 
-  async getOrdersByRegion(userId: string) {
-    const fleet_manager = await this.prisma.users.findFirst({
+  async getOrdersByRegion(userId: string, deliveryPartnerId?: string) {
+    const fleetManager = await this.prisma.users.findUnique({
       where: { id: userId },
     });
-    return this.prisma.orders.findMany({
+
+    if (!fleetManager) throw new NotFoundException('Fleet manager not found');
+
+    // 1. Get all orders in the region with filtered assignments
+    const orders = await this.prisma.orders.findMany({
       where: {
-        user: { region_id: fleet_manager.region_id },
+        user: { region_id: fleetManager.region_id },
+        assignments: {
+          some: {
+            ...(deliveryPartnerId && {
+              delivery_partner_id: deliveryPartnerId,
+            }),
+          },
+        },
       },
       include: {
         user: true,
         meal_type: true,
+        assignments: {
+          where: deliveryPartnerId
+            ? { delivery_partner_id: deliveryPartnerId }
+            : {},
+        },
       },
     });
+
+    // 2. Sort in memory by the lowest sequence of each order's assignments
+    orders.sort((a, b) => {
+      const seqA = a.assignments[0]?.sequence ?? Infinity;
+      const seqB = b.assignments[0]?.sequence ?? Infinity;
+      return seqA - seqB;
+    });
+
+    return orders;
   }
 
   async assignDelivery(dto: AssignDeliveryDto) {
@@ -97,10 +127,7 @@ export class FleetManagerService {
       const customerRole = await prisma.roles.findFirst({
         where: { name: 'customer' },
       });
-
-      if (!customerRole) {
-        throw new NotFoundException('Customer role not found');
-      }
+      if (!customerRole) throw new NotFoundException('Customer role not found');
 
       customer = await prisma.users.create({
         data: {
@@ -108,7 +135,7 @@ export class FleetManagerService {
           name: dto.name,
           phone: dto.phone,
           address: dto.address,
-          password: 'defaultPassword@123', // consider hashing
+          password: 'defaultPassword@123', // hash in production
           role: { connect: { id: customerRole.id } },
           status: 'active',
         },
@@ -116,27 +143,57 @@ export class FleetManagerService {
     }
 
     // 2. Validate meal type
-    const mealType = await prisma.meal_types.findFirst({
+    const mealType = await prisma.meal_types.findUnique({
       where: { id: dto.meal_type_id },
     });
+    if (!mealType) throw new NotFoundException('Meal Type Not Found');
 
-    if (!mealType) {
-      throw new NotFoundException('Meal Type Not Found');
-    }
+    const recurringDays = dto.recurring_days.map(
+      (d) => DAY_MAP[d.toLowerCase()],
+    );
 
-    // 3. Count existing active orders for sequence
+    // 3. Calculate amount
+    const amount = await this.ordersService.calculateAmount(
+      mealType.id,
+      dto.meal_preferences,
+      dto.start_date,
+      dto.end_date,
+      recurringDays,
+    );
+
+    // 4. Count for sequence
     const activeOrders = await prisma.orders.count({
       where: {
         user_id: customer.id,
         status: { in: ['active', 'pending'] },
       },
     });
-
     const sequence = activeOrders + 1;
 
-    // 4. Create order with preferences
+    // ✅ 5. Generate formatted order ID like ORD-0001
+    const latestOrder = await prisma.orders.findFirst({
+      orderBy: { created_at: 'desc' },
+      select: { order_id: true },
+      where: {
+        order_id: {
+          startsWith: 'ORD-',
+        },
+      },
+    });
+
+    let nextOrderNumber = 1;
+    if (latestOrder?.order_id) {
+      const match = latestOrder.order_id.match(/ORD-(\d+)/);
+      if (match) {
+        nextOrderNumber = parseInt(match[1]) + 1;
+      }
+    }
+    const formattedOrderId = `ORD-${String(nextOrderNumber).padStart(4, '0')}`;
+
+    // 6. Create order with order_id
     const order = await prisma.orders.create({
       data: {
+        order_id: formattedOrderId,
         user_id: customer.id,
         delevery_address: dto.delivery_address,
         latitude: 0,
@@ -144,10 +201,10 @@ export class FleetManagerService {
         meal_type_id: dto.meal_type_id,
         start_date: new Date(dto.start_date),
         end_date: new Date(dto.end_date),
-        amount: 500, // hardcoded for now
+        amount,
         preferences: {
-          create: dto.recurring_days.map((day) => ({
-            week_day: DAY_MAP[day.toLowerCase()],
+          create: recurringDays.map((day) => ({
+            week_day: day,
             breakfast: dto.meal_preferences.breakfast,
             lunch: dto.meal_preferences.lunch,
             dinner: dto.meal_preferences.dinner,
@@ -157,35 +214,51 @@ export class FleetManagerService {
       include: { preferences: true },
     });
 
-    // 5. Validate delivery partner
+    // 7. Validate delivery partner
     const deliveryPartner = await prisma.users.findFirst({
       where: {
         id: dto.delivery_partner_id,
         role: { name: 'delivery_partner' },
       },
     });
+    if (!deliveryPartner)
+      throw new NotFoundException('Delivery partner not found');
 
-    if (!deliveryPartner) {
-      throw new NotFoundException('Delivery partner not found or invalid');
-    }
+    // 8. Create delivery assignments
+    const selectedMeals = ['breakfast', 'lunch', 'dinner'].filter(
+      (meal) => dto.meal_preferences[meal as keyof typeof dto.meal_preferences],
+    );
 
-    // 6. Determine meal type for assignment (defaults to lunch)
-    const selectedMealType = (['breakfast', 'lunch', 'dinner'].find(
-      (m) => dto.meal_preferences[m as keyof typeof dto.meal_preferences],
-    ) || 'lunch') as meal_type_enum;
-
-    // 7. Create delivery assignment
-    await prisma.delivery_assignments.create({ 
-      data: {
-        order: { connect: { id: order.id } },
-        meal: { connect: { id: dto.meal_type_id } },
-        delivery_partner: { connect: { id: dto.delivery_partner_id } },
-        meal_type: selectedMealType,
-        sequence,
-        assigned_by_user: { connect: { id: assignedBy } },
-      },
+    await prisma.delivery_assignments.createMany({
+      data: selectedMeals.map((meal) => ({
+        order_id: order.id,
+        meal_id: dto.meal_type_id,
+        delivery_partner_id: dto.delivery_partner_id,
+        meal_type: meal as meal_type_enum,
+        sequence: sequence,
+        assigned_by: assignedBy,
+      })),
     });
 
     return order;
+  }
+
+  async updateDeliverySequences(
+    partnerId: string,
+    dto: UpdateDeliverySequenceDto,
+  ) {
+    for (const { order_id, new_sequence } of dto.orders) {
+      await this.prisma.delivery_assignments.updateMany({
+        where: {
+          delivery_partner_id: partnerId,
+          order_id,
+        },
+        data: {
+          sequence: new_sequence,
+        },
+      });
+    }
+
+    return { message: 'Sequence updated successfully' };
   }
 }
