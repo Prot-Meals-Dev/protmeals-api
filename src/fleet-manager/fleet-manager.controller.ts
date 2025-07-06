@@ -6,8 +6,8 @@ import {
   Param,
   Patch,
   UseGuards,
-  Request,
   Query,
+  Req,
 } from '@nestjs/common';
 import { FleetManagerService } from './fleet-manager.service';
 import { CreatePartnerDto } from './dto/create-partner.dto';
@@ -17,6 +17,7 @@ import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { CreateCustomerOrderDto } from './dto/create-customer-order.dto';
 import { UpdateDeliverySequenceDto } from './dto/update-delivery-sequence.dto';
+import { Request } from 'express';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('fleet_manager')
@@ -25,53 +26,68 @@ export class FleetManagerController {
   constructor(private readonly fleetManagerService: FleetManagerService) {}
 
   @Post('create-partner')
-  async createPartner(@Body() dto: CreatePartnerDto, @Request() req) {
-    const fleetManagerId = req.user.id;
+  async createPartner(@Body() dto: CreatePartnerDto, @Req() req: Request) {
+    const fleetManagerId = req.user['id'];
     const deliveryPartner =
       await this.fleetManagerService.createDeliveryPartner(dto, fleetManagerId);
-    req.responseMessage = 'Delivery partner created successfully';
+    req['responseMessage'] = 'Delivery partner created successfully';
     return deliveryPartner;
   }
 
   @Get('orders')
   async getRegionOrders(
-    @Request() req,
+    @Req() req: Request,
     @Query('deliveryPartnerId') deliveryPartnerId?: string,
   ) {
-    const userId = req.user.id;
+    const userId = req.user['id'];
     const orderList = await this.fleetManagerService.getOrdersByRegion(
       userId,
       deliveryPartnerId,
     );
-    req.responseMessage = 'Order list fetched successfully';
+    req['responseMessage'] = 'Order list fetched successfully';
     return orderList;
   }
 
+  @Get('analytics')
+  async getFleetManagerAnalytics(@Req() req: Request) {
+    const managerId = req.user['id'];
+    const analytics =
+      await this.fleetManagerService.getFleetManagerAnalytics(managerId);
+    req['responseMessage'] = 'Fleet manager analytics fetched successfully';
+    return analytics;
+  }
+
   @Post('assign-delivery')
-  async assignDelivery(@Body() dto: AssignDeliveryDto, @Request() req) {
+  async assignDelivery(@Body() dto: AssignDeliveryDto, @Req() req: Request) {
     const result = await this.fleetManagerService.assignDelivery(dto);
-    req.responseMessage = 'Delivery partner assigned successfully';
+    req['responseMessage'] = 'Delivery partner assigned successfully';
     return result;
   }
 
   @Post('create-customer-order')
   async createCustomerOrder(
     @Body() dto: CreateCustomerOrderDto,
-    @Request() req,
+    @Req() req: Request,
   ) {
     const result = await this.fleetManagerService.createCustomerOrder(
       dto,
-      req.user.id,
+      req.user['id'],
     );
-    req.responseMessage = 'Customer order created successfully';
+    req['responseMessage'] = 'Customer order created successfully';
     return result;
   }
 
   @Patch('delivery-sequence/:partnerId')
-  updateDeliverySequence(
+  async updateDeliverySequence(
     @Param('partnerId') partnerId: string,
     @Body() dto: UpdateDeliverySequenceDto,
+    @Req() req: Request,
   ) {
-    return this.fleetManagerService.updateDeliverySequences(partnerId, dto);
+    const updated = await this.fleetManagerService.updateDeliverySequences(
+      partnerId,
+      dto,
+    );
+    req['responseMessage'] = 'Delivery sequence updated successfully';
+    return updated;
   }
 }

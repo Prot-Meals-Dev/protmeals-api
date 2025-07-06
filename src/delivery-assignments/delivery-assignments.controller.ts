@@ -30,6 +30,17 @@ export class DeliveryAssignmentsController {
     );
   }
 
+  @Get('analytics')
+  async getAnalytics(@Req() req: Request) {
+    const partnerId = req.user['userId'];
+    const analytics =
+      await this.deliveryAssignmentsService.getDeliveryPartnerAnalytics(
+        partnerId,
+      );
+    req['responseMessage'] = 'Delivery partner analytics fetched successfully';
+    return analytics;
+  }
+
   @Get(':id')
   async getDeliveryDetails(@Param('id') id: string, @Req() req: Request) {
     const partnerId = req.user['userId'];
