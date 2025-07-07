@@ -58,6 +58,16 @@ export class FleetManagerController {
     req['responseMessage'] = 'Fleet manager analytics fetched successfully';
     return analytics;
   }
+  @Get('partner-orders/:partnerId')
+  async getPartnerOrdersInSequence(
+    @Param('partnerId') partnerId: string,
+    @Req() req: Request,
+  ) {
+    const orders =
+      await this.fleetManagerService.getPartnerOrdersInSequence(partnerId);
+    req['responseMessage'] = 'Orders for partner fetched in sequence';
+    return orders;
+  }
 
   @Get('all-deliveries')
   async getAllRegionDeliveries(
