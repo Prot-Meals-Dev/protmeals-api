@@ -404,4 +404,61 @@ export class FleetManagerService {
       data: dto,
     });
   }
+
+  async getAllRegionDeliveries(managerId: string, date?: string) {
+    const today = date ? new Date(date) : undefined;
+
+    const manager = await this.prisma.users.findUnique({
+      where: { id: managerId },
+      select: { region_id: true },
+    });
+
+    if (!manager?.region_id) {
+      throw new NotFoundException('Fleet manager region not found');
+    }
+
+    const whereCondition: any = {
+      partner: {
+        region_id: manager.region_id,
+      },
+    };
+
+    if (today) {
+      whereCondition.delivery_date = dayjs(today).startOf('day').toDate();
+    }
+
+    return this.prisma.daily_deliveries.findMany({
+      where: whereCondition,
+      orderBy: {
+        sequence: 'asc',
+      },
+      include: {
+        user: {
+          select: {
+            name: true,
+            phone: true,
+            address: true,
+          },
+        },
+        partner: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        assignment: {
+          select: {
+            order_id: true,
+            meal_type: true,
+            meal: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
 }

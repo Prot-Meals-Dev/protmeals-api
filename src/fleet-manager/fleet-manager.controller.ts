@@ -59,6 +59,20 @@ export class FleetManagerController {
     return analytics;
   }
 
+  @Get('all-deliveries')
+  async getAllRegionDeliveries(
+    @Req() req: Request,
+    @Query('date') date?: string,
+  ) {
+    const managerId = req.user['id'];
+    const result = await this.fleetManagerService.getAllRegionDeliveries(
+      managerId,
+      date,
+    );
+    req['responseMessage'] = 'Region deliveries fetched successfully';
+    return result;
+  }
+
   @Post('assign-delivery')
   async assignDelivery(@Body() dto: AssignDeliveryDto, @Req() req: Request) {
     const result = await this.fleetManagerService.assignDelivery(dto);
