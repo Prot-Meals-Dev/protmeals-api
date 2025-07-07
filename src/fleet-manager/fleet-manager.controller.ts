@@ -18,6 +18,8 @@ import { Roles } from 'src/common/decorators/roles.decorator';
 import { CreateCustomerOrderDto } from './dto/create-customer-order.dto';
 import { UpdateDeliverySequenceDto } from './dto/update-delivery-sequence.dto';
 import { Request } from 'express';
+import { UpdateCustomerOrderDto } from './dto/update-customer-order.dto';
+import { UpdatePartnerDetailsDto } from './dto/update-partner-details.dto';
 
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('fleet_manager')
@@ -89,5 +91,33 @@ export class FleetManagerController {
     );
     req['responseMessage'] = 'Delivery sequence updated successfully';
     return updated;
+  }
+
+  @Patch('update-customer-order/:orderId')
+  async updateCustomerOrder(
+    @Param('orderId') orderId: string,
+    @Body() dto: UpdateCustomerOrderDto,
+    @Req() req: Request,
+  ) {
+    const updated = await this.fleetManagerService.updateCustomerOrder(
+      orderId,
+      dto,
+    );
+    req['responseMessage'] = 'Customer order updated successfully';
+    return updated;
+  }
+
+  @Patch('update-partner/:partnerId')
+  async updatePartnerDetails(
+    @Param('partnerId') partnerId: string,
+    @Body() dto: UpdatePartnerDetailsDto,
+    @Req() req: Request,
+  ) {
+    const result = await this.fleetManagerService.updatePartnerDetails(
+      partnerId,
+      dto,
+    );
+    req['responseMessage'] = 'Delivery partner updated successfully';
+    return result;
   }
 }

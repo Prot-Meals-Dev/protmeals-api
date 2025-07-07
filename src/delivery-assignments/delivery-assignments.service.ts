@@ -67,19 +67,28 @@ export class DeliveryAssignmentsService {
         user: {
           select: {
             name: true,
-            address: true,
             phone: true,
           },
         },
         assignment: {
           select: {
-            order_id: true,
             meal_type: true,
             meal: {
               select: {
                 name: true,
               },
             },
+          },
+        },
+        order: {
+          select: {
+            order_id: true,
+            delevery_address: true,
+            start_date: true,
+            end_date: true,
+            amount: true,
+            status: true,
+            created_at: true,
           },
         },
       },
