@@ -75,8 +75,6 @@ export class UsersController {
   }
 
   @Get(':id')
-  @UseGuards(RolesGuard)
-  @Roles('admin')
   async findOne(@Request() req, @Param('id') id: string) {
     const user = await this.usersService.findOne(id);
     req.responseMessage = 'User found';
