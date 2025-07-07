@@ -10,17 +10,17 @@ export class DeliveryCronService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  @Cron(CronExpression.EVERY_DAY_AT_3AM)
+  @Cron(CronExpression.EVERY_DAY_AT_11AM)
   async assignBreakfastDeliveries() {
     await this.generateDailyDeliveries('breakfast');
   }
 
-  @Cron(CronExpression.EVERY_DAY_AT_10AM)
+  @Cron(CronExpression.EVERY_DAY_AT_5AM)
   async assignLunchDeliveries() {
     await this.generateDailyDeliveries('lunch');
   }
 
-  @Cron(CronExpression.EVERY_DAY_AT_4PM)
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async assignDinnerDeliveries() {
     await this.generateDailyDeliveries('dinner');
   }

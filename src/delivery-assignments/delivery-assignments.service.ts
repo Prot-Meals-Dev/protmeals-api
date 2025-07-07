@@ -8,13 +8,17 @@ export class DeliveryAssignmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getPartnerDeliveries(partnerId: string, date?: string) {
-    const deliveryDate = new Date(date);
-    console.log(deliveryDate);
+    const where: any = {
+      delivery_partner_id: partnerId,
+    };
+
+    if (date) {
+      const deliveryDate = new Date(date);
+      where.delivery_date = deliveryDate;
+    }
+
     return this.prisma.daily_deliveries.findMany({
-      where: {
-        delivery_partner_id: partnerId,
-        delivery_date: deliveryDate,
-      },
+      where,
       orderBy: {
         sequence: 'asc',
       },
