@@ -59,7 +59,10 @@ export class UsersController {
     if (req.user.role === 'admin') {
       user_id == null;
     }
-    const staff = await this.usersService.findByRole('fleet_manager', user_id);
+    const staff = await this.usersService.findByRole(
+      'delivery_partner',
+      user_id,
+    );
     req.responseMessage = 'Partners found';
     return staff;
   }
