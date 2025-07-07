@@ -461,4 +461,49 @@ export class FleetManagerService {
       },
     });
   }
+
+  async getPartnerOrdersInSequence(partnerId: string) {
+    // Fetch the earliest assignment per order for the partner
+    const assignments = await this.prisma.delivery_assignments.findMany({
+      where: {
+        delivery_partner_id: partnerId,
+      },
+      orderBy: {
+        sequence: 'asc',
+      },
+      include: {
+        order: {
+          include: {
+            user: {
+              select: {
+                name: true,
+                phone: true,
+                address: true,
+              },
+            },
+            meal_type: {
+              select: {
+                name: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Group by order_id to avoid duplicate orders
+    const seen = new Set();
+    const uniqueAssignments = assignments.filter((a) => {
+      if (seen.has(a.order_id)) return false;
+      seen.add(a.order_id);
+      return true;
+    });
+
+    return uniqueAssignments.map((a) => ({
+      order_id: a.order_id,
+      sequence: a.sequence,
+      meal_type: a.meal_type,
+      order: a.order,
+    }));
+  }
 }
