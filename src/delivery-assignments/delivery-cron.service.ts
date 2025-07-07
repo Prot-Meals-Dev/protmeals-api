@@ -79,7 +79,8 @@ export class DeliveryCronService {
           delivery_assignments_id: assignment.id,
           delivery_date: today,
           sequence: assignment.sequence,
-          status: 'pending', 
+          order_id: assignment.order.id,
+          status: 'pending',
         },
       });
 

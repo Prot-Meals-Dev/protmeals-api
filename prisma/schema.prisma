@@ -126,12 +126,13 @@ model orders {
   coupon_id        String?
   created_at       DateTime          @default(now()) @db.Timestamp(3)
 
-  user         users                    @relation(fields: [user_id], references: [id])
-  meal_type    meal_types?              @relation(fields: [meal_type_id], references: [id])
-  coupon       coupons?                 @relation(fields: [coupon_id], references: [id])
-  preferences  order_meal_preferences[]
-  transactions transactions[]
-  assignments  delivery_assignments[]
+  user             users                    @relation(fields: [user_id], references: [id])
+  meal_type        meal_types?              @relation(fields: [meal_type_id], references: [id])
+  coupon           coupons?                 @relation(fields: [coupon_id], references: [id])
+  preferences      order_meal_preferences[]
+  transactions     transactions[]
+  assignments      delivery_assignments[]
+  daily_deliveries daily_deliveries[]
 
   @@map("orders")
 }
@@ -153,6 +154,7 @@ model daily_deliveries {
   id                      String                    @id @default(uuid())
   delivery_partner_id     String
   user_id                 String
+  order_id                String
   delivery_date           DateTime                  @db.Date
   status                  delivery_item_status_enum @default(pending)
   delivery_assignments_id String?
@@ -162,6 +164,7 @@ model daily_deliveries {
   user       users                 @relation(fields: [user_id], references: [id])
   partner    users                 @relation("PartnerDeliveries", fields: [delivery_partner_id], references: [id])
   assignment delivery_assignments? @relation(fields: [delivery_assignments_id], references: [id])
+  order      orders                @relation(fields: [order_id], references: [id])
 
   @@map("daily_deliveries")
 }

@@ -12,6 +12,8 @@ import { meal_type_enum } from '@prisma/client';
 import { OrdersService } from 'src/orders/orders.service';
 import { UpdateDeliverySequenceDto } from './dto/update-delivery-sequence.dto';
 import * as dayjs from 'dayjs';
+import { UpdateCustomerOrderDto } from './dto/update-customer-order.dto';
+import { UpdatePartnerDetailsDto } from './dto/update-partner-details.dto';
 
 @Injectable()
 export class FleetManagerService {
@@ -327,5 +329,79 @@ export class FleetManagerService {
       totalOrders: orderCount,
       totalDeliveriesToday: deliveries.length,
     };
+  }
+
+  async updateCustomerOrder(orderId: string, dto: UpdateCustomerOrderDto) {
+    const order = await this.prisma.orders.findUnique({
+      where: { id: orderId },
+      include: { preferences: true },
+    });
+
+    if (!order) throw new NotFoundException('Order not found');
+
+    const updateData: any = {};
+
+    if (dto.delivery_address)
+      updateData.delevery_address = dto.delivery_address;
+    if (dto.start_date) updateData.start_date = new Date(dto.start_date);
+    if (dto.end_date) updateData.end_date = new Date(dto.end_date);
+
+    // Update preferences
+    if (dto.meal_preferences || dto.recurring_days) {
+      await this.prisma.order_meal_preferences.deleteMany({
+        where: { order_id: orderId },
+      });
+
+      const DAY_MAP: Record<string, number> = {
+        sun: 0,
+        mon: 1,
+        tue: 2,
+        wed: 3,
+        thu: 4,
+        fri: 5,
+        sat: 6,
+      };
+
+      const days =
+        dto.recurring_days?.map((d) => DAY_MAP[d.toLowerCase()]) ?? [];
+      const prefs = {
+        breakfast: dto.meal_preferences?.breakfast ?? false,
+        lunch: dto.meal_preferences?.lunch ?? false,
+        dinner: dto.meal_preferences?.dinner ?? false,
+      };
+
+      updateData.preferences = {
+        create: days.map((day) => ({
+          week_day: day,
+          breakfast: prefs.breakfast,
+          lunch: prefs.lunch,
+          dinner: prefs.dinner,
+        })),
+      };
+    }
+
+    return this.prisma.orders.update({
+      where: { id: orderId },
+      data: updateData,
+      include: { preferences: true },
+    });
+  }
+
+  async updatePartnerDetails(partnerId: string, dto: UpdatePartnerDetailsDto) {
+    const partner = await this.prisma.users.findFirst({
+      where: {
+        id: partnerId,
+        role: { name: 'delivery_partner' },
+      },
+    });
+
+    if (!partner) {
+      throw new NotFoundException('Delivery partner not found');
+    }
+
+    return this.prisma.users.update({
+      where: { id: partnerId },
+      data: dto,
+    });
   }
 }
