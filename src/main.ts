@@ -33,14 +33,7 @@ async function bootstrap() {
     }),
   );
 
-  app.enableCors({
-    origin: [
-      'http://localhost:4200',
-      'https://api.protmeals.com',
-      'https://staging.protmeals.com',
-    ],
-    credentials: true,
-  });
+  app.enableCors();
   app.useGlobalInterceptors(new ResponseInterceptor());
 
   await app.listen(process.env.PORT || 3000);
