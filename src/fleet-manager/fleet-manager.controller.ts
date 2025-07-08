@@ -8,6 +8,7 @@ import {
   UseGuards,
   Query,
   Req,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { FleetManagerService } from './fleet-manager.service';
 import { CreatePartnerDto } from './dto/create-partner.dto';
@@ -40,16 +41,26 @@ export class FleetManagerController {
   async getRegionOrders(
     @Req() req: Request,
     @Query('deliveryPartnerId') deliveryPartnerId?: string,
+    @Query('date') date?: string, // format: YYYY-MM-DD
+    @Query('status') status?: string,
   ) {
-    const userId = req.user['id'];
+    const userId = req.user?.['id'] as string;
+    if (!userId) throw new UnauthorizedException('Unauthorized');
+
     const orderList = await this.fleetManagerService.getOrdersByRegion(
       userId,
       deliveryPartnerId,
+      date,
+      status,
     );
-    req['responseMessage'] = 'Order list fetched successfully';
-    return orderList;
-  }
 
+    req['responseMessage'] = 'Order list fetched successfully';
+    return {
+      message: req['responseMessage'],
+      data: orderList,
+    };
+  }
+  
   @Get('analytics')
   async getFleetManagerAnalytics(@Req() req: Request) {
     const managerId = req.user['id'];

@@ -1,5 +1,6 @@
 // src/fleet-manager/fleet-manager.service.ts
 import {
+  BadRequestException,
   ConflictException,
   Injectable,
   NotFoundException,
@@ -8,7 +9,7 @@ import { CreatePartnerDto } from './dto/create-partner.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AssignDeliveryDto } from './dto/assign-delivery.dto';
 import { CreateCustomerOrderDto } from './dto/create-customer-order.dto';
-import { meal_type_enum } from '@prisma/client';
+import { meal_type_enum, order_status_enum } from '@prisma/client';
 import { OrdersService } from 'src/orders/orders.service';
 import { UpdateDeliverySequenceDto } from './dto/update-delivery-sequence.dto';
 import * as dayjs from 'dayjs';
@@ -55,17 +56,38 @@ export class FleetManagerService {
     });
   }
 
-  async getOrdersByRegion(userId: string, deliveryPartnerId?: string) {
+  async getOrdersByRegion(
+    userId: string,
+    deliveryPartnerId?: string,
+    date?: string,
+    status?: string,
+  ) {
     const fleetManager = await this.prisma.users.findUnique({
       where: { id: userId },
     });
 
     if (!fleetManager) throw new NotFoundException('Fleet manager not found');
 
-    // 1. Get all orders in the region with filtered assignments
+    const dateFilter = date ? new Date(date) : undefined;
+
+    // ✅ Validate enum
+    if (
+      status &&
+      !Object.values(order_status_enum).includes(status as order_status_enum)
+    ) {
+      throw new BadRequestException('Invalid order status');
+    }
+
     const orders = await this.prisma.orders.findMany({
       where: {
-        user: { region_id: fleetManager.region_id },
+        user: {
+          region_id: fleetManager.region_id,
+        },
+        ...(status && { status: status as order_status_enum }),
+        ...(dateFilter && {
+          start_date: { lte: dateFilter },
+          end_date: { gte: dateFilter },
+        }),
         assignments: {
           some: {
             ...(deliveryPartnerId && {
@@ -85,7 +107,7 @@ export class FleetManagerService {
       },
     });
 
-    // 2. Sort in memory by the lowest sequence of each order's assignments
+    // ✅ Sort by lowest assignment sequence
     orders.sort((a, b) => {
       const seqA = a.assignments[0]?.sequence ?? Infinity;
       const seqB = b.assignments[0]?.sequence ?? Infinity;
@@ -334,57 +356,53 @@ export class FleetManagerService {
   async updateCustomerOrder(orderId: string, dto: UpdateCustomerOrderDto) {
     const order = await this.prisma.orders.findUnique({
       where: { id: orderId },
-      include: { preferences: true },
+      include: {
+        user: true,
+        assignments: true,
+      },
     });
 
     if (!order) throw new NotFoundException('Order not found');
 
-    const updateData: any = {};
-
-    if (dto.delivery_address)
-      updateData.delevery_address = dto.delivery_address;
-    if (dto.start_date) updateData.start_date = new Date(dto.start_date);
-    if (dto.end_date) updateData.end_date = new Date(dto.end_date);
-
-    // Update preferences
-    if (dto.meal_preferences || dto.recurring_days) {
-      await this.prisma.order_meal_preferences.deleteMany({
-        where: { order_id: orderId },
+    // Update delivery address in order
+    if (dto.delivery_address) {
+      await this.prisma.orders.update({
+        where: { id: orderId },
+        data: { delevery_address: dto.delivery_address },
       });
-
-      const DAY_MAP: Record<string, number> = {
-        sun: 0,
-        mon: 1,
-        tue: 2,
-        wed: 3,
-        thu: 4,
-        fri: 5,
-        sat: 6,
-      };
-
-      const days =
-        dto.recurring_days?.map((d) => DAY_MAP[d.toLowerCase()]) ?? [];
-      const prefs = {
-        breakfast: dto.meal_preferences?.breakfast ?? false,
-        lunch: dto.meal_preferences?.lunch ?? false,
-        dinner: dto.meal_preferences?.dinner ?? false,
-      };
-
-      updateData.preferences = {
-        create: days.map((day) => ({
-          week_day: day,
-          breakfast: prefs.breakfast,
-          lunch: prefs.lunch,
-          dinner: prefs.dinner,
-        })),
-      };
     }
 
-    return this.prisma.orders.update({
-      where: { id: orderId },
-      data: updateData,
-      include: { preferences: true },
-    });
+    // Update user's phone and address
+    if (dto.phone || dto.address) {
+      await this.prisma.users.update({
+        where: { id: order.user_id },
+        data: {
+          ...(dto.phone && { phone: dto.phone }),
+          ...(dto.address && { address: dto.address }),
+        },
+      });
+    }
+
+    // Update delivery partner
+    if (dto.delivery_partner_id) {
+      const partner = await this.prisma.users.findFirst({
+        where: {
+          id: dto.delivery_partner_id,
+          role: { name: 'delivery_partner' },
+        },
+      });
+
+      if (!partner) throw new NotFoundException('Delivery partner not found');
+
+      await this.prisma.delivery_assignments.updateMany({
+        where: { order_id: orderId },
+        data: { delivery_partner_id: dto.delivery_partner_id },
+      });
+    }
+
+    return {
+      orderId,
+    };
   }
 
   async updatePartnerDetails(partnerId: string, dto: UpdatePartnerDetailsDto) {
