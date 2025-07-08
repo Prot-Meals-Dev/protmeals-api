@@ -8,15 +8,17 @@ export class DeliveryAssignmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async getPartnerDeliveries(partnerId: string, date?: string) {
-    const deliveryDate = dayjs(date ?? new Date())
-      .startOf('day')
-      .toDate();
+    const where: any = {
+      delivery_partner_id: partnerId,
+    };
+
+    if (date) {
+      const deliveryDate = new Date(date);
+      where.delivery_date = deliveryDate;
+    }
 
     return this.prisma.daily_deliveries.findMany({
-      where: {
-        delivery_partner_id: partnerId,
-        delivery_date: deliveryDate,
-      },
+      where,
       orderBy: {
         sequence: 'asc',
       },
@@ -69,13 +71,11 @@ export class DeliveryAssignmentsService {
         user: {
           select: {
             name: true,
-            address: true,
             phone: true,
           },
         },
         assignment: {
           select: {
-            order_id: true,
             meal_type: true,
             meal: {
               select: {
@@ -84,7 +84,73 @@ export class DeliveryAssignmentsService {
             },
           },
         },
+        order: {
+          select: {
+            order_id: true,
+            delevery_address: true,
+            start_date: true,
+            end_date: true,
+            amount: true,
+            status: true,
+            created_at: true,
+          },
+        },
       },
     });
+  }
+
+  async getDeliveryPartnerAnalytics(partnerId: string) {
+    const today = dayjs().startOf('day').toDate();
+
+    const [totalAssigned, todayDeliveries, todayCompleted, breakdown] =
+      await Promise.all([
+        this.prisma.delivery_assignments.count({
+          where: { delivery_partner_id: partnerId },
+        }),
+
+        this.prisma.daily_deliveries.count({
+          where: {
+            delivery_partner_id: partnerId,
+            delivery_date: today,
+          },
+        }),
+
+        this.prisma.daily_deliveries.count({
+          where: {
+            delivery_partner_id: partnerId,
+            delivery_date: today,
+            status: 'delivered',
+          },
+        }),
+
+        this.prisma.delivery_assignments.groupBy({
+          by: ['meal_type'],
+          where: {
+            delivery_partner_id: partnerId,
+            order: {
+              start_date: { lte: today },
+              end_date: { gte: today },
+            },
+          },
+          _count: true,
+        }),
+      ]);
+
+    const breakdownObj = {
+      breakfast: 0,
+      lunch: 0,
+      dinner: 0,
+    };
+
+    breakdown.forEach((b) => {
+      breakdownObj[b.meal_type] = b._count;
+    });
+
+    return {
+      totalAssigned,
+      todayDeliveries,
+      todayCompleted,
+      breakdown: breakdownObj,
+    };
   }
 }

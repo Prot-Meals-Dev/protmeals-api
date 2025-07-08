@@ -37,7 +37,7 @@ export class UsersController {
   @Roles('admin')
   async findAll(@Request() req, @Query('role') role?: string) {
     const users = role
-      ? await this.usersService.findByRole(role)
+      ? await this.usersService.findByRole(role, req.user.id)
       : await this.usersService.findAll();
     req.responseMessage = 'Users found';
     return users;
@@ -51,12 +51,19 @@ export class UsersController {
     return roles;
   }
 
-  @Get('staff')
+  @Get('delivery-partner')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('admin', 'fleet_manager')
   async findAllStaff(@Request() req) {
-    const staff = await this.usersService.findByRole('staff');
-    req.responseMessage = 'Staff found';
+    const user_id = req.user.id;
+    if (req.user.role === 'admin') {
+      user_id == null;
+    }
+    const staff = await this.usersService.findByRole(
+      'delivery_partner',
+      user_id,
+    );
+    req.responseMessage = 'Partners found';
     return staff;
   }
 
@@ -68,8 +75,6 @@ export class UsersController {
   }
 
   @Get(':id')
-  @UseGuards(RolesGuard)
-  @Roles('admin')
   async findOne(@Request() req, @Param('id') id: string) {
     const user = await this.usersService.findOne(id);
     req.responseMessage = 'User found';

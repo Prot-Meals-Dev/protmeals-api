@@ -75,9 +75,18 @@ export class UsersService {
     });
   }
 
-  async findByRole(roleName: string) {
+  async findByRole(roleName: string, user_id: string) {
+    let where = {};
+    if (user_id) {
+      const user = await this.prisma.users.findFirst({
+        where: {
+          id: user_id,
+        },
+      });
+      where = { region_id: user.region_id };
+    }
     return this.prisma.users.findMany({
-      where: { role: { name: roleName } },
+      where: { role: { name: roleName }, ...where },
       select: {
         id: true,
         name: true,
