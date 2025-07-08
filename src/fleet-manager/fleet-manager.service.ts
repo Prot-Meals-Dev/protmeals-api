@@ -70,7 +70,6 @@ export class FleetManagerService {
 
     const dateFilter = date ? new Date(date) : undefined;
 
-    // ✅ Validate enum
     if (
       status &&
       !Object.values(order_status_enum).includes(status as order_status_enum)
@@ -80,9 +79,9 @@ export class FleetManagerService {
 
     const orders = await this.prisma.orders.findMany({
       where: {
-        user: {
-          region_id: fleetManager.region_id,
-        },
+        // user: {
+        //   region_id: fleetManager.region_id,
+        // },
         ...(status && { status: status as order_status_enum }),
         ...(dateFilter && {
           start_date: { lte: dateFilter },
@@ -99,22 +98,62 @@ export class FleetManagerService {
       include: {
         user: true,
         meal_type: true,
+        preferences: true,
         assignments: {
           where: deliveryPartnerId
             ? { delivery_partner_id: deliveryPartnerId }
             : {},
+          include: {
+            delivery_partner: {
+              select: { id: true, name: true },
+            },
+          },
         },
       },
     });
 
-    // ✅ Sort by lowest assignment sequence
-    orders.sort((a, b) => {
-      const seqA = a.assignments[0]?.sequence ?? Infinity;
-      const seqB = b.assignments[0]?.sequence ?? Infinity;
-      return seqA - seqB;
+    console.log(orders);
+
+    const dayMap = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+    const formatted = orders.map((order) => {
+      const recurringDays = [
+        ...new Set(order.preferences.map((pref) => dayMap[pref.week_day])),
+      ];
+
+      const samplePref = order.preferences[0] ?? {
+        breakfast: false,
+        lunch: false,
+        dinner: false,
+      };
+
+      const assignment = order.assignments[0];
+
+      return {
+        id: order.id,
+        name: order.user.name,
+        address: order.user.address,
+        delivery_address: order.delevery_address,
+        phone: order.user.phone,
+        email: order.user.email,
+        meal_type_id: order.meal_type_id,
+        meal_type_name: order.meal_type?.name ?? null,
+        start_date: dayjs(order.start_date).format('YYYY-MM-DD'),
+        end_date: dayjs(order.end_date).format('YYYY-MM-DD'),
+        recurring_days: recurringDays,
+        delivery_partner_id: assignment?.delivery_partner_id ?? null,
+        delivery_partner_name: assignment?.delivery_partner?.name ?? null,
+        meal_preferences: {
+          breakfast: samplePref.breakfast,
+          lunch: samplePref.lunch,
+          dinner: samplePref.dinner,
+        },
+        status: order.status,
+        amount: Number(order.amount),
+      };
     });
 
-    return orders;
+    return formatted;
   }
 
   async assignDelivery(dto: AssignDeliveryDto) {

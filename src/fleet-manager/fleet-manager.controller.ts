@@ -55,12 +55,9 @@ export class FleetManagerController {
     );
 
     req['responseMessage'] = 'Order list fetched successfully';
-    return {
-      message: req['responseMessage'],
-      data: orderList,
-    };
+    return orderList;
   }
-  
+
   @Get('analytics')
   async getFleetManagerAnalytics(@Req() req: Request) {
     const managerId = req.user['id'];
