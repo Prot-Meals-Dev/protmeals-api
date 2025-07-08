@@ -9,7 +9,7 @@ import { CreatePartnerDto } from './dto/create-partner.dto';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { AssignDeliveryDto } from './dto/assign-delivery.dto';
 import { CreateCustomerOrderDto } from './dto/create-customer-order.dto';
-import { meal_type_enum, order_status_enum } from '@prisma/client';
+import { meal_type_enum, order_status_enum, Prisma } from '@prisma/client';
 import { OrdersService } from 'src/orders/orders.service';
 import { UpdateDeliverySequenceDto } from './dto/update-delivery-sequence.dto';
 import * as dayjs from 'dayjs';
@@ -61,6 +61,8 @@ export class FleetManagerService {
     deliveryPartnerId?: string,
     date?: string,
     status?: string,
+    page = 1,
+    limit = 10,
   ) {
     const fleetManager = await this.prisma.users.findUnique({
       where: { id: userId },
@@ -77,24 +79,27 @@ export class FleetManagerService {
       throw new BadRequestException('Invalid order status');
     }
 
-    const orders = await this.prisma.orders.findMany({
-      where: {
-        // user: {
-        //   region_id: fleetManager.region_id,
-        // },
-        ...(status && { status: status as order_status_enum }),
-        ...(dateFilter && {
-          start_date: { lte: dateFilter },
-          end_date: { gte: dateFilter },
-        }),
-        assignments: {
-          some: {
-            ...(deliveryPartnerId && {
-              delivery_partner_id: deliveryPartnerId,
-            }),
-          },
+    const whereClause: Prisma.ordersWhereInput = {
+      ...(status && { status: status as order_status_enum }),
+      ...(dateFilter && {
+        start_date: { lte: dateFilter },
+        end_date: { gte: dateFilter },
+      }),
+      assignments: {
+        some: {
+          ...(deliveryPartnerId && {
+            delivery_partner_id: deliveryPartnerId,
+          }),
         },
       },
+    };
+
+    const total = await this.prisma.orders.count({ where: whereClause });
+
+    const orders = await this.prisma.orders.findMany({
+      where: whereClause,
+      skip: (page - 1) * limit,
+      take: limit,
       include: {
         user: true,
         meal_type: true,
@@ -111,8 +116,6 @@ export class FleetManagerService {
         },
       },
     });
-
-    console.log(orders);
 
     const dayMap = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
@@ -153,7 +156,12 @@ export class FleetManagerService {
       };
     });
 
-    return formatted;
+    return {
+      total,
+      page,
+      limit,
+      data: formatted,
+    };
   }
 
   async assignDelivery(dto: AssignDeliveryDto) {
