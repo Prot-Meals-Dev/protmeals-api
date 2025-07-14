@@ -17,7 +17,7 @@ export class DeliveryCronService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  @Cron(CronExpression.EVERY_10_SECONDS)
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async generateAllDailyDeliveries() {
     const mealTypes: meal_type_enum[] = [
       meal_type_enum.breakfast,
