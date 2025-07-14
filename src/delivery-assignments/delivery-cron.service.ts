@@ -32,9 +32,8 @@ export class DeliveryCronService {
 
   private async generateDailyDeliveries(mealType: meal_type_enum) {
     const now = dayjs().tz(this.TIMEZONE);
-    const today = now.endOf('day').toDate(); // ✅ JavaScript Date at local midnight
-    const weekday = now.day(); // ✅ Correct weekday
-
+    const today = now.endOf('day').toDate();
+    const weekday = now.endOf('day').day();
     this.logger.log(
       `📦 Generating ${mealType} deliveries for ${today.toISOString()} (${this.TIMEZONE})`,
     );
