@@ -17,7 +17,6 @@ export class UsersService {
       email,
       password,
       role: roleName,
-      priority: inputPriority,
     } = createUserDto;
 
     const existingUser = await this.prisma.users.findUnique({
@@ -35,14 +34,6 @@ export class UsersService {
     }
 
     delete createUserDto.role;
-
-    if (inputPriority && role.name === 'staff') {
-      const totalStaff = await this.prisma.users.count({
-        where: { role_id: role.id }, // fixed: roleId → role_id
-      });
-      const finalPriority = Math.min(inputPriority, totalStaff + 1);
-      createUserDto.priority = finalPriority;
-    }
 
     const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
 

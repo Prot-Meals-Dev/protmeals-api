@@ -16,17 +16,14 @@ export class CreateUserDto {
   @IsOptional()
   phone?: string;
 
-  @IsInt()
-  @IsOptional()
-  priority?: number;
-
   @IsString()
   role: string;
+
+  @IsString()
+  @IsOptional()
+  address: string;
 
   @IsEnum(user_status_enum)
   @IsOptional()
   status?: user_status_enum = user_status_enum.active;
-
-  @IsOptional()
-  stripe_customer_id?: string;
 }
