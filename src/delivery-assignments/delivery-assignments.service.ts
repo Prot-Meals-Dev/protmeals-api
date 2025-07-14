@@ -1,20 +1,49 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as dayjs from 'dayjs';
 import { DeliveryItemStatus } from './dto/update-status.dto';
+import { delivery_item_status_enum, meal_type_enum } from '@prisma/client';
 
 @Injectable()
 export class DeliveryAssignmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getPartnerDeliveries(partnerId: string, date?: string) {
+  async getPartnerDeliveries(
+    partnerId: string,
+    date?: string,
+    status?: delivery_item_status_enum,
+    mealType?: meal_type_enum,
+  ) {
     const where: any = {
       delivery_partner_id: partnerId,
     };
 
+    // Optional date filter
     if (date) {
-      const deliveryDate = new Date(date);
-      where.delivery_date = deliveryDate;
+      const parsedDate = dayjs(date);
+      if (!parsedDate.isValid()) {
+        throw new BadRequestException('Invalid date format');
+      }
+      where.delivery_date = parsedDate.startOf('day').toDate();
+    }
+
+    // Optional status filter
+    if (status) {
+      if (!Object.values(delivery_item_status_enum).includes(status)) {
+        throw new BadRequestException('Invalid delivery status value');
+      }
+      where.status = status;
+    }
+
+    // Optional meal type filter (nested under assignment)
+    if (mealType) {
+      if (!Object.values(meal_type_enum).includes(mealType)) {
+        throw new BadRequestException('Invalid meal type value');
+      }
+
+      where.assignment = {
+        meal_type: mealType,
+      };
     }
 
     return this.prisma.daily_deliveries.findMany({

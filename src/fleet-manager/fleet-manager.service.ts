@@ -134,6 +134,7 @@ export class FleetManagerService {
 
       return {
         id: order.id,
+        order_id: order.order_id,
         name: order.user.name,
         address: order.user.address,
         delivery_address: order.delevery_address,

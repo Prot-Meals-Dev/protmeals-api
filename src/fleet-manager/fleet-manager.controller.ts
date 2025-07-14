@@ -41,7 +41,7 @@ export class FleetManagerController {
   async getRegionOrders(
     @Req() req: Request,
     @Query('deliveryPartnerId') deliveryPartnerId?: string,
-    @Query('date') date?: string, // format: YYYY-MM-DD
+    @Query('date') date?: string,
     @Query('status') status?: string,
     @Query('page') page = '1',
     @Query('limit') limit = '10',

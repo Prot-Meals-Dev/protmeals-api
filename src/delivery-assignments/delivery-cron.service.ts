@@ -2,35 +2,41 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service';
 import * as dayjs from 'dayjs';
+import * as utc from 'dayjs/plugin/utc';
+import * as timezone from 'dayjs/plugin/timezone';
 import { meal_type_enum, order_status_enum } from '@prisma/client';
+
+// Extend dayjs with timezone support
+dayjs.extend(utc);
+dayjs.extend(timezone);
 
 @Injectable()
 export class DeliveryCronService {
   private readonly logger = new Logger(DeliveryCronService.name);
+  private readonly TIMEZONE = process.env.APP_TIMEZONE || 'Asia/Kolkata';
 
   constructor(private readonly prisma: PrismaService) {}
 
-  @Cron(CronExpression.EVERY_DAY_AT_11AM)
-  async assignBreakfastDeliveries() {
-    await this.generateDailyDeliveries('breakfast');
-  }
+  @Cron(CronExpression.EVERY_10_SECONDS)
+  async generateAllDailyDeliveries() {
+    const mealTypes: meal_type_enum[] = [
+      meal_type_enum.breakfast,
+      meal_type_enum.lunch,
+      meal_type_enum.dinner,
+    ];
 
-  @Cron(CronExpression.EVERY_DAY_AT_5AM)
-  async assignLunchDeliveries() {
-    await this.generateDailyDeliveries('lunch');
-  }
-
-  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
-  async assignDinnerDeliveries() {
-    await this.generateDailyDeliveries('dinner');
+    for (const mealType of mealTypes) {
+      await this.generateDailyDeliveries(mealType);
+    }
   }
 
   private async generateDailyDeliveries(mealType: meal_type_enum) {
-    const today = dayjs().startOf('day').toDate();
-    const weekday = dayjs().day(); // Sunday = 0
+    const now = dayjs().tz(this.TIMEZONE);
+    const today = now.endOf('day').toDate(); // ✅ JavaScript Date at local midnight
+    const weekday = now.day(); // ✅ Correct weekday
 
     this.logger.log(
-      `📦 Generating ${mealType} deliveries for ${today.toDateString()}`,
+      `📦 Generating ${mealType} deliveries for ${today.toISOString()} (${this.TIMEZONE})`,
     );
 
     const assignments = await this.prisma.delivery_assignments.findMany({
@@ -61,7 +67,7 @@ export class DeliveryCronService {
       const exists = await this.prisma.daily_deliveries.findFirst({
         where: {
           delivery_assignments_id: assignment.id,
-          delivery_date: today,
+          delivery_date: today, // ✅ valid Date object (not string)
         },
       });
 

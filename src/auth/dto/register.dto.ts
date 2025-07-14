@@ -26,6 +26,10 @@ export class RegisterDto {
   phone?: string;
 
   @IsString()
+  @IsOptional()
+  address: string;
+
+  @IsString()
   @IsNotEmpty()
   role: string;
 }

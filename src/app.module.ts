@@ -11,6 +11,9 @@ import { MealTypesModule } from './meal_types/meal_types.module';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { DeliveryAssignmentsModule } from './delivery-assignments/delivery-assignments.module';
+import { RegionsModule } from './regions/regions.module';
+import { CouponsModule } from './coupons/coupons.module';
+
 
 @Module({
   imports: [
@@ -27,6 +30,8 @@ import { DeliveryAssignmentsModule } from './delivery-assignments/delivery-assig
     MealTypesModule,
     DeliveryAssignmentsModule,
     PrismaModule,
+    RegionsModule,
+    CouponsModule,
   ],
 })
 export class AppModule {}
