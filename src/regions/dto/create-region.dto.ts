@@ -1,4 +1,10 @@
-import { IsBoolean, IsOptional, IsString, IsInt } from 'class-validator';
+import {
+  IsBoolean,
+  IsOptional,
+  IsString,
+  IsInt,
+  IsNotEmpty,
+} from 'class-validator';
 
 export class CreateRegionDto {
   @IsString()
@@ -12,6 +18,7 @@ export class CreateRegionDto {
   state?: string;
 
   @IsString()
+  @IsNotEmpty()
   pincode: string;
 
   @IsOptional()
@@ -29,8 +36,4 @@ export class CreateRegionDto {
   @IsOptional()
   @IsInt()
   customer_count?: number;
-
-  @IsOptional()
-  @IsString()
-  fleetManagerId?: string;
 }

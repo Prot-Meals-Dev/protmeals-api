@@ -62,6 +62,8 @@ export class FleetManagerController {
     return orderList;
   }
 
+  
+
   @Get('analytics')
   async getFleetManagerAnalytics(@Req() req: Request) {
     const managerId = req.user['id'];

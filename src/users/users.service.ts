@@ -13,41 +13,51 @@ export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createUserDto: CreateUserDto) {
-    const {
-      email,
-      password,
-      role: roleName,
-    } = createUserDto;
+    const { email, password, name, phone, address, role, region_id } =
+      createUserDto;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const roleData = await this.prisma.roles.findFirst({
+      where: { name: role },
+    });
+    if (!roleData) {
+      throw new NotFoundException('Role not found');
+    }
+    if ((role === 'fleet_manager' || role === 'client') && !region_id) {
+      // ✅ Enforce region_id for specific roles
+      throw new ConflictException(`region_id is required for role: ${role}`);
+    }
+
+    // ✅ Optional: validate region existence
+    if (region_id) {
+      const regionExists = await this.prisma.regions.findUnique({
+        where: { id: region_id },
+      });
+      if (!regionExists) {
+        throw new ConflictException(`Region not found`);
+      }
+    }
 
     const existingUser = await this.prisma.users.findUnique({
       where: { email },
     });
-    if (existingUser) throw new ConflictException('Email already in use');
 
-    const role = await this.prisma.roles.findUnique({
-      where: { name: roleName },
-    });
-    if (!role) {
-      throw new ConflictException(
-        `Invalid role. Available roles: 'admin', 'staff', 'customer'`,
-      );
+    if (existingUser) {
+      throw new ConflictException('Email already in use');
     }
 
-    delete createUserDto.role;
-
-    const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
-
-    const user = await this.prisma.users.create({
+    const newUser = await this.prisma.users.create({
       data: {
-        ...createUserDto,
+        name,
+        email,
         password: hashedPassword,
-        role: { connect: { id: role.id } },
+        phone,
+        address,
+        role: { connect: { id: roleData.id } },
+        ...(region_id && { region: { connect: { id: region_id } } }), // ✅ correct
       },
-      include: { role: true },
     });
 
-    const { password: _, ...result } = user;
-    return result;
+    return newUser;
   }
 
   async findAll() {
@@ -58,7 +68,7 @@ export class UsersService {
         email: true,
         phone: true,
         status: true,
-        role_id: true, // fixed: roleId → role_id
+        region: true,
         role: true,
         created_at: true, // fixed: createdAt → created_at
         updated_at: true, // fixed: updatedAt → updated_at
@@ -85,6 +95,62 @@ export class UsersService {
         phone: true,
         status: true,
         role_id: true,
+        role: true,
+        created_at: true,
+        updated_at: true,
+      },
+    });
+  }
+
+  async findAllWithFilters(filters: {
+    role?: string;
+    status?: string;
+    region_id?: string;
+    search?: string;
+    requester_id?: string;
+  }) {
+    const { role, status, region_id, search, requester_id } = filters;
+
+    const user = await this.prisma.users.findUnique({
+      where: { id: requester_id },
+    });
+
+    const where: any = {};
+
+    // region-based filtering for non-global roles
+    if (user?.region_id) {
+      where.region_id = user.region_id;
+    }
+
+    if (role) {
+      where.role = { name: role };
+    }
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (region_id) {
+      where.region_id = region_id;
+    }
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    return this.prisma.users.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        status: true,
+        region: true,
         role: true,
         created_at: true,
         updated_at: true,
