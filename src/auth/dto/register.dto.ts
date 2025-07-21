@@ -32,4 +32,8 @@ export class RegisterDto {
   @IsString()
   @IsNotEmpty()
   role: string;
+
+  @IsOptional()
+  @IsString()
+  region_id?: string;
 }

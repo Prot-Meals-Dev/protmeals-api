@@ -35,10 +35,21 @@ export class UsersController {
   @Get()
   @UseGuards(RolesGuard)
   @Roles('admin')
-  async findAll(@Request() req, @Query('role') role?: string) {
-    const users = role
-      ? await this.usersService.findByRole(role, req.user.id)
-      : await this.usersService.findAll();
+  async findAll(
+    @Request() req,
+    @Query('role') role?: string,
+    @Query('status') status?: string,
+    @Query('region_id') region_id?: string,
+    @Query('search') search?: string,
+  ) {
+    const users = await this.usersService.findAllWithFilters({
+      role,
+      status,
+      region_id,
+      search,
+      requester_id: req.user.id,
+    });
+
     req.responseMessage = 'Users found';
     return users;
   }

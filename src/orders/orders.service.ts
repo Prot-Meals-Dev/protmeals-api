@@ -1,4 +1,8 @@
-import { Injectable, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { meal_type_enum, order_status_enum } from '@prisma/client';
@@ -102,12 +106,79 @@ export class OrdersService {
   }
 
   async updateStatus(id: string, status: order_status_enum) {
-    return this.prisma.orders.update({
+    const order = await this.prisma.orders.findUnique({
       where: { id },
-      data: {
-        status: { set: status },
+      include: {
+        assignments: true,
+        preferences: true,
       },
     });
+
+    if (!order) throw new NotFoundException('Order not found');
+
+    const today = new Date();
+
+    // 1. Update order status
+    await this.prisma.orders.update({
+      where: { id },
+      data: { status },
+    });
+
+    // 2. Handle status-specific side effects
+    if (
+      status === 'paused' ||
+      status === 'cancelled' ||
+      status === 'completed'
+    ) {
+      // Delete all future deliveries
+      await this.prisma.daily_deliveries.deleteMany({
+        where: {
+          assignment: {
+            order_id: id,
+          },
+          delivery_date: {
+            gt: today,
+          },
+        },
+      });
+    }
+
+    if (status === 'active') {
+      if (order.end_date > today) {
+        const daysToGenerate = [];
+
+        for (
+          let d = new Date(today);
+          d <= order.end_date;
+          d.setDate(d.getDate() + 1)
+        ) {
+          const day = d.getDay(); // 0 = Sunday ... 6 = Saturday
+          const pref = order.preferences.find((p) => p.week_day === day);
+          if (pref) daysToGenerate.push(new Date(d));
+        }
+
+        for (const date of daysToGenerate) {
+          for (const assignment of order.assignments) {
+            await this.prisma.daily_deliveries.create({
+              data: {
+                delivery_date: date,
+                delivery_assignments_id: assignment.id,
+                user_id: order.user_id,
+                delivery_partner_id: assignment.delivery_partner_id,
+                order_id: order.id, 
+                sequence: assignment.sequence,
+              },
+            });
+          }
+        }
+      }
+    }
+
+    return {
+      orderId: id,
+      newStatus: status,
+      message: `Order status updated to ${status}`,
+    };
   }
 
   async createOrder(data: CreateOrderDto) {

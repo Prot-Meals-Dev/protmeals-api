@@ -23,6 +23,10 @@ export class CreateUserDto {
   @IsOptional()
   address: string;
 
+  @IsString()
+  @IsOptional()
+  region_id: string;
+
   @IsEnum(user_status_enum)
   @IsOptional()
   status?: user_status_enum = user_status_enum.active;

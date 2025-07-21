@@ -10,6 +10,8 @@ async function bootstrap() {
   // Global prefix
   app.setGlobalPrefix('v1');
 
+  app.enableCors();
+
   // Stripe webhook needs raw body
   app.use(
     '/api/webhooks/stripe',
@@ -33,7 +35,6 @@ async function bootstrap() {
     }),
   );
 
-  app.enableCors();
   app.useGlobalInterceptors(new ResponseInterceptor());
 
   await app.listen(process.env.PORT || 3000);

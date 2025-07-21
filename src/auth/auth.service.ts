@@ -54,7 +54,13 @@ export class AuthService {
       throw new ConflictException('Email already in use');
     }
 
-    const user = await this.usersService.create({ ...registerDto });
+    const user = await this.usersService.create({
+      ...registerDto,
+      region_id:
+        registerDto.role === 'fleet_manager' || registerDto.role === 'client'
+          ? registerDto.region_id
+          : undefined,
+    });
 
     if (registerDto.password) {
       return this.generateToken(user);
