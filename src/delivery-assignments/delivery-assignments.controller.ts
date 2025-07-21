@@ -28,7 +28,7 @@ export class DeliveryAssignmentsController {
     @Query('status') status?: delivery_item_status_enum,
     @Query('mealType') mealType?: meal_type_enum,
   ) {
-    const partnerId = req.user['userId'];
+    const partnerId = req.user['id'];
     return this.deliveryAssignmentsService.getPartnerDeliveries(
       partnerId,
       date,
@@ -39,7 +39,7 @@ export class DeliveryAssignmentsController {
 
   @Get('analytics')
   async getAnalytics(@Req() req: Request) {
-    const partnerId = req.user['userId'];
+    const partnerId = req.user['id'];
     const analytics =
       await this.deliveryAssignmentsService.getDeliveryPartnerAnalytics(
         partnerId,
@@ -50,7 +50,7 @@ export class DeliveryAssignmentsController {
 
   @Get(':id')
   async getDeliveryDetails(@Param('id') id: string, @Req() req: Request) {
-    const partnerId = req.user['userId'];
+    const partnerId = req.user['id'];
     const delivery = await this.deliveryAssignmentsService.getDeliveryDetail(
       id,
       partnerId,
@@ -68,7 +68,7 @@ export class DeliveryAssignmentsController {
     @Body() dto: UpdateDeliveryStatusDto,
     @Req() req: Request,
   ) {
-    const partnerId = req.user['userId'];
+    const partnerId = req.user['id'];
     const updated = await this.deliveryAssignmentsService.updateDeliveryStatus(
       id,
       dto.status,
