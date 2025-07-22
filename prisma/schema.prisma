@@ -45,6 +45,12 @@ enum meal_type_enum {
   dinner
 }
 
+enum coupon_status_enum {
+  active
+  used
+  expired
+}
+
 model roles {
   id         String   @id @default(uuid())
   name       String   @unique @db.VarChar(191)
@@ -133,6 +139,7 @@ model orders {
   transactions     transactions[]
   assignments      delivery_assignments[]
   daily_deliveries daily_deliveries[]
+  order_pauses     order_pauses[]
 
   @@map("orders")
 }
@@ -216,16 +223,29 @@ model user_otps {
 }
 
 model coupons {
-  id             String   @id @default(uuid())
-  text           String   @db.VarChar(191)
+  id             String             @id @default(uuid())
+  text           String             @unique @db.VarChar(191)
   days_added     Int?
-  discount_price Decimal? @db.Decimal(10, 2)
+  discount_price Decimal?           @db.Decimal(10, 2)
   created_by     String
-  created_at     DateTime @default(now()) @db.Timestamp(3)
+  status         coupon_status_enum @default(active)
+  created_at     DateTime           @default(now()) @db.Timestamp(3)
   expires_at     DateTime
 
   creator users    @relation("CreatedBy", fields: [created_by], references: [id])
   orders  orders[]
 
   @@map("coupons")
+}
+
+model order_pauses {
+  id         String   @id @default(uuid())
+  order_id   String
+  pause_date DateTime @db.Date
+  created_at DateTime @default(now()) @db.Timestamp(3)
+
+  order orders @relation(fields: [order_id], references: [id])
+
+  @@unique([order_id, pause_date])
+  @@map("order_pauses")
 }

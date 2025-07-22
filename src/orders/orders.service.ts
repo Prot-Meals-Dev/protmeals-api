@@ -2,11 +2,13 @@ import {
   Injectable,
   BadRequestException,
   NotFoundException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { meal_type_enum, order_status_enum } from '@prisma/client';
 import { FilterOrdersDto } from './dto/filter-orders.dto';
+import { Roles } from 'src/common/decorators/roles.decorator';
 const dayjs = require('dayjs');
 const isSameOrBefore = require('dayjs/plugin/isSameOrBefore');
 
@@ -105,71 +107,77 @@ export class OrdersService {
     });
   }
 
-  async updateStatus(id: string, status: order_status_enum) {
+  async updateStatus(id: string, status: order_status_enum, userId: string) {
+    const user = await this.prisma.users.findUnique({
+      where: { id: userId },
+      include: { role: true },
+    });
     const order = await this.prisma.orders.findUnique({
       where: { id },
       include: {
         assignments: true,
         preferences: true,
+        user: true, // needed to get user's region
       },
     });
 
     if (!order) throw new NotFoundException('Order not found');
 
+    // 🚫 Restrict fleet_manager from accessing orders outside their region
+    if (user.role.name === 'fleet_manager') {
+      const orderRegion = order.user.region_id;
+      if (!orderRegion || user.region_id !== orderRegion) {
+        throw new ForbiddenException(
+          'You are not authorized to modify this order',
+        );
+      }
+    }
+
     const today = new Date();
 
-    // 1. Update order status
+    // ✅ Update order status
     await this.prisma.orders.update({
       where: { id },
       data: { status },
     });
 
-    // 2. Handle status-specific side effects
-    if (
-      status === 'paused' ||
-      status === 'cancelled' ||
-      status === 'completed'
-    ) {
-      // Delete all future deliveries
+    // 🧹 Handle paused/cancelled/completed: delete future deliveries
+    if (['paused', 'cancelled', 'completed'].includes(status)) {
       await this.prisma.daily_deliveries.deleteMany({
         where: {
-          assignment: {
-            order_id: id,
-          },
-          delivery_date: {
-            gt: today,
+          delivery_date: { gt: today },
+          delivery_assignments_id: {
+            in: order.assignments.map((a) => a.id),
           },
         },
       });
     }
 
-    if (status === 'active') {
-      if (order.end_date > today) {
-        const daysToGenerate = [];
+    // 🔁 Handle resume: regenerate future deliveries
+    if (status === 'active' && order.end_date > today) {
+      const daysToGenerate: Date[] = [];
 
-        for (
-          let d = new Date(today);
-          d <= order.end_date;
-          d.setDate(d.getDate() + 1)
-        ) {
-          const day = d.getDay(); // 0 = Sunday ... 6 = Saturday
-          const pref = order.preferences.find((p) => p.week_day === day);
-          if (pref) daysToGenerate.push(new Date(d));
-        }
+      for (
+        let d = new Date(today);
+        d <= order.end_date;
+        d.setDate(d.getDate() + 1)
+      ) {
+        const pref = order.preferences.find((p) => p.week_day === d.getDay());
+        if (pref) daysToGenerate.push(new Date(d));
+      }
 
-        for (const date of daysToGenerate) {
-          for (const assignment of order.assignments) {
-            await this.prisma.daily_deliveries.create({
-              data: {
-                delivery_date: date,
-                delivery_assignments_id: assignment.id,
-                user_id: order.user_id,
-                delivery_partner_id: assignment.delivery_partner_id,
-                order_id: order.id, 
-                sequence: assignment.sequence,
-              },
-            });
-          }
+      for (const date of daysToGenerate) {
+        for (const assignment of order.assignments) {
+          await this.prisma.daily_deliveries.create({
+            data: {
+              delivery_date: date,
+              delivery_assignments_id: assignment.id,
+              user_id: order.user_id,
+              delivery_partner_id: assignment.delivery_partner_id,
+              order_id: order.id,
+              sequence: assignment.sequence,
+            },
+          });
         }
       }
     }
@@ -309,6 +317,53 @@ export class OrdersService {
     }
 
     return total;
+  }
+
+  async pauseOrderOnDays(orderId: string, dates: Date[], userId: string) {
+    const user = await this.prisma.users.findUnique({
+      where: { id: userId },
+      include: { role: true },
+    });
+    const order = await this.prisma.orders.findUnique({
+      where: { id: orderId },
+      include: { user: true },
+    });
+
+    if (!order) throw new NotFoundException('Order not found');
+
+    // Region check for fleet managers
+    if (
+      user.role.name === 'fleet_manager' &&
+      order.user.region_id !== user.region_id
+    ) {
+      throw new ForbiddenException('Unauthorized access to this order');
+    }
+
+    // Delete daily deliveries for specified dates
+    await this.prisma.daily_deliveries.deleteMany({
+      where: {
+        order_id: orderId,
+        delivery_date: {
+          in: dates,
+        },
+      },
+    });
+
+    // Log pauses (optional)
+    const pauseLogs = dates.map((date) => ({
+      order_id: orderId,
+      pause_date: date,
+    }));
+
+    await this.prisma.order_pauses.createMany({
+      data: pauseLogs,
+      skipDuplicates: true,
+    });
+
+    return {
+      message: `Order paused on ${dates.map((d) => d.toDateString()).join(', ')}`,
+      pausedDates: dates,
+    };
   }
 }
 
