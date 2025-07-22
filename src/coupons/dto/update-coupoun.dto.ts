@@ -1,4 +1,4 @@
 import { PartialType } from '@nestjs/mapped-types';
-import { CreateCoupounDto } from './create-coupoun.dto';
+import { CreateCouponDto } from './create-coupoun.dto';
 
-export class UpdateCoupounDto extends PartialType(CreateCoupounDto) {}
+export class UpdateCoupounDto extends PartialType(CreateCouponDto) {}

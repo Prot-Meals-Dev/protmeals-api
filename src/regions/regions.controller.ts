@@ -33,6 +33,7 @@ export class RegionsController {
   async findAll(@Query() filterDto: FilterRegionDto) {
     return this.regionsService.findAll(filterDto);
   }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.regionsService.findOne(id);
