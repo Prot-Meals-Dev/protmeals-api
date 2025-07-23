@@ -7,7 +7,7 @@ import {
   IsEnum,
 } from 'class-validator';
 
-export class RegisterDto {
+export class   RegisterDto {
   @IsString()
   @IsNotEmpty()
   name: string;

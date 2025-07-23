@@ -44,7 +44,7 @@ enum meal_type_enum {
   lunch
   dinner
 }
-
+ 
 enum coupon_status_enum {
   active
   used

@@ -182,4 +182,62 @@ export class DeliveryAssignmentsService {
       breakdown: breakdownObj,
     };
   }
+
+  async getAssignedOrdersForPartner(partnerId: string) {
+    const assignments = await this.prisma.delivery_assignments.findMany({
+      where: {
+        delivery_partner_id: partnerId,
+      },
+      include: {
+        order: {
+          include: {
+            user: true,
+            preferences: true,
+          },
+        },
+      },
+    });
+
+    const groupedByOrder = new Map();
+
+    for (const assignment of assignments) {
+      const { order } = assignment;
+      const orderId = order.id;
+
+      if (!groupedByOrder.has(orderId)) {
+        const mealTypes = [];
+        const preferencesByWeekDay = new Map();
+
+        for (const pref of order.preferences) {
+          const day = pref.week_day;
+          preferencesByWeekDay.set(day, {
+            breakfast: pref.breakfast,
+            lunch: pref.lunch,
+            dinner: pref.dinner,
+          });
+        }
+
+        // Flatten days and active meal types
+        const allDays = [...preferencesByWeekDay.entries()];
+        const days = allDays.map(([day]) => this.getDayLabel(day));
+        const activeMeals = ['Breakfast', 'Lunch', 'Dinner'].filter((meal, i) =>
+          allDays.some(([, meals]) => meals[meal.toLowerCase()]),
+        );
+
+        groupedByOrder.set(orderId, {
+          userName: order.user.name,
+          meals: activeMeals,
+          type: 'Recurring', // You can modify this based on logic
+          days,
+        });
+      }
+    }
+
+    return Array.from(groupedByOrder.values());
+  }
+
+  private getDayLabel(day: number): string {
+    const map = ['S', 'M', 'T', 'W', 'TH', 'F', 'S'];
+    return map[day % 7];
+  }
 }

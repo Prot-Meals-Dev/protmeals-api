@@ -8,7 +8,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { meal_type_enum, order_status_enum } from '@prisma/client';
 import { FilterOrdersDto } from './dto/filter-orders.dto';
-import { Roles } from 'src/common/decorators/roles.decorator';
 const dayjs = require('dayjs');
 const isSameOrBefore = require('dayjs/plugin/isSameOrBefore');
 
