@@ -85,6 +85,7 @@ export class FleetManagerService {
         start_date: { lte: dateFilter },
         end_date: { gte: dateFilter },
       }),
+      user: { region_id: fleetManager.region_id },
       assignments: {
         some: {
           ...(deliveryPartnerId && {

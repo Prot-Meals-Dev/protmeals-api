@@ -62,6 +62,17 @@ export class DeliveryAssignmentsController {
     return delivery;
   }
 
+  @Get('partner/orders')
+  @UseGuards(JwtAuthGuard)
+  async getPartnerOrders(@Req() req) {
+    const partnerId = req.user.id;
+    const orders =
+      await this.deliveryAssignmentsService.getAssignedOrdersForPartner(
+        partnerId,
+      );
+    return orders;
+  }
+
   @Patch(':id/status')
   async updateStatus(
     @Param('id') id: string,
