@@ -95,8 +95,13 @@ export class OrdersService {
   async findOne(id: string) {
     return this.prisma.orders.findUnique({
       where: { id },
-      include: { user: true, meal_type: true, coupon: true },
-    });
+      include: {
+        user: true,
+        meal_type: true,
+        coupon: true,
+        order_pauses: true,
+      },
+    }); 
   }
 
   async findByUser(userId: string) {

@@ -13,6 +13,7 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { DeliveryAssignmentsModule } from './delivery-assignments/delivery-assignments.module';
 import { RegionsModule } from './regions/regions.module';
 import { CouponsModule } from './coupons/coupons.module';
+import { AdminModule } from './admin/admin.module';
 
 
 @Module({
@@ -32,6 +33,7 @@ import { CouponsModule } from './coupons/coupons.module';
     PrismaModule,
     RegionsModule,
     CouponsModule,
+    AdminModule,
   ],
 })
 export class AppModule {}

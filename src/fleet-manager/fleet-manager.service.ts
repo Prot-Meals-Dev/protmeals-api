@@ -15,6 +15,7 @@ import { UpdateDeliverySequenceDto } from './dto/update-delivery-sequence.dto';
 import * as dayjs from 'dayjs';
 import { UpdateCustomerOrderDto } from './dto/update-customer-order.dto';
 import { UpdatePartnerDetailsDto } from './dto/update-partner-details.dto';
+import { accessSync } from 'fs';
 
 @Injectable()
 export class FleetManagerService {
@@ -182,6 +183,10 @@ export class FleetManagerService {
   async createCustomerOrder(dto: CreateCustomerOrderDto, assignedBy: string) {
     const prisma = this.prisma;
 
+    const fleetManager = await this.prisma.users.findUnique({
+      where: { id: assignedBy },
+    });
+
     const DAY_MAP: Record<string, number> = {
       sun: 0,
       mon: 1,
@@ -209,7 +214,7 @@ export class FleetManagerService {
           name: dto.name,
           phone: dto.phone,
           address: dto.address,
-          password: 'defaultPassword@123', // hash in production
+          region: { connect: { id: fleetManager.region_id } },
           role: { connect: { id: customerRole.id } },
           status: 'active',
         },

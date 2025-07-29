@@ -55,7 +55,12 @@ export class AuthService {
     }
 
     const user = await this.usersService.create({
-      ...registerDto,
+      name: registerDto.name,
+      email: registerDto.email,
+      password: registerDto.password,
+      phone: registerDto.phone,
+      role: registerDto.role,
+      address: registerDto.address,
       region_id:
         registerDto.role === 'fleet_manager' || registerDto.role === 'client'
           ? registerDto.region_id
