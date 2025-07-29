@@ -96,7 +96,7 @@ export class AuthService {
     const user = await this.prisma.users.findUnique({ where: { email } });
 
     if (!user) {
-      return { message: 'Not a registered user' };
+    throw new ConflictException("Not a Registerd User")
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();

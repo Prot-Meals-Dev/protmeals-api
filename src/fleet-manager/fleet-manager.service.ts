@@ -69,9 +69,21 @@ export class FleetManagerService {
       where: { id: userId },
     });
 
-    if (!fleetManager) throw new NotFoundException('Fleet manager not found');
+    if (!fleetManager) {
+      throw new NotFoundException('Fleet manager not found');
+    }
 
-    const dateFilter = date ? new Date(date) : undefined;
+    // Parse and validate date
+    let startOfDay: Date | undefined;
+    let endOfDay: Date | undefined;
+    if (date) {
+      const parsed = dayjs(date);
+      if (!parsed.isValid()) {
+        throw new BadRequestException('Invalid date format');
+      }
+      startOfDay = parsed.startOf('day').toDate();
+      endOfDay = parsed.endOf('day').toDate();
+    }
 
     if (
       status &&
@@ -80,26 +92,32 @@ export class FleetManagerService {
       throw new BadRequestException('Invalid order status');
     }
 
-    const whereClause: Prisma.ordersWhereInput = {
+    // Base where clause: orders under the same region
+    const baseWhere: Prisma.ordersWhereInput = {
       ...(status && { status: status as order_status_enum }),
-      ...(dateFilter && {
-        start_date: { lte: dateFilter },
-        end_date: { gte: dateFilter },
-      }),
+      ...(startOfDay &&
+        endOfDay && {
+          start_date: { lte: endOfDay },
+          end_date: { gte: startOfDay },
+        }),
       user: { region_id: fleetManager.region_id },
-      assignments: {
-        some: {
-          ...(deliveryPartnerId && {
-            delivery_partner_id: deliveryPartnerId,
-          }),
-        },
-      },
     };
 
-    const total = await this.prisma.orders.count({ where: whereClause });
+    // If deliveryPartnerId is provided, filter orders with at least one matching assignment
+    if (deliveryPartnerId) {
+      baseWhere.assignments = {
+        some: {
+          delivery_partner_id: deliveryPartnerId,
+        },
+      };
+    }
+
+    const total = await this.prisma.orders.count({
+      where: baseWhere,
+    });
 
     const orders = await this.prisma.orders.findMany({
-      where: whereClause,
+      where: baseWhere,
       skip: (page - 1) * limit,
       take: limit,
       include: {
@@ -132,7 +150,12 @@ export class FleetManagerService {
         dinner: false,
       };
 
-      const assignment = order.assignments[0];
+      const formattedAssignments = order.assignments.map((a) => ({
+        meal: a.meal_id,
+        delivery_partner_id: a.delivery_partner_id,
+        delivery_partner_name: a.delivery_partner?.name ?? null,
+        sequence: a.sequence,
+      }));
 
       return {
         id: order.id,
@@ -147,8 +170,6 @@ export class FleetManagerService {
         start_date: dayjs(order.start_date).format('YYYY-MM-DD'),
         end_date: dayjs(order.end_date).format('YYYY-MM-DD'),
         recurring_days: recurringDays,
-        delivery_partner_id: assignment?.delivery_partner_id ?? null,
-        delivery_partner_name: assignment?.delivery_partner?.name ?? null,
         meal_preferences: {
           breakfast: samplePref.breakfast,
           lunch: samplePref.lunch,
@@ -156,6 +177,8 @@ export class FleetManagerService {
         },
         status: order.status,
         amount: Number(order.amount),
+        total_assignments: order.assignments.length,
+        delivery_assignments: formattedAssignments,
       };
     });
 
