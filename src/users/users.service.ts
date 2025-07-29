@@ -15,7 +15,10 @@ export class UsersService {
   async create(createUserDto: CreateUserDto) {
     const { email, password, name, phone, address, role, region_id } =
       createUserDto;
-    const hashedPassword = await bcrypt.hash(password, 10);
+    let hashedPassword;
+    if (password) {
+      hashedPassword = await bcrypt.hash(password, 10);
+    }
     const roleData = await this.prisma.roles.findFirst({
       where: { name: role },
     });
@@ -49,7 +52,7 @@ export class UsersService {
       data: {
         name,
         email,
-        password: hashedPassword,
+        password: hashedPassword ? hashedPassword : null,
         phone,
         address,
         role: { connect: { id: roleData.id } },

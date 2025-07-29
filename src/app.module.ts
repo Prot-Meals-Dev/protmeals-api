@@ -14,6 +14,7 @@ import { DeliveryAssignmentsModule } from './delivery-assignments/delivery-assig
 import { RegionsModule } from './regions/regions.module';
 import { CouponsModule } from './coupons/coupons.module';
 import { AdminModule } from './admin/admin.module';
+import { WeeklyMenuModule } from './weekly-menu/weekly-menu.module';
 
 
 @Module({
@@ -34,6 +35,7 @@ import { AdminModule } from './admin/admin.module';
     RegionsModule,
     CouponsModule,
     AdminModule,
+    WeeklyMenuModule,
   ],
 })
 export class AppModule {}
