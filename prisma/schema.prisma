@@ -44,7 +44,7 @@ enum meal_type_enum {
   lunch
   dinner
 }
- 
+
 enum coupon_status_enum {
   active
   used
@@ -166,6 +166,7 @@ model daily_deliveries {
   status                  delivery_item_status_enum @default(pending)
   delivery_assignments_id String?
   sequence                Int
+  meal_type               meal_type_enum
   created_at              DateTime                  @default(now()) @db.Timestamp(3)
 
   user       users                 @relation(fields: [user_id], references: [id])
@@ -251,11 +252,11 @@ model order_pauses {
 }
 
 model weekly_menu {
-  id        String   @id @default(uuid())
-  day       String   @unique @db.VarChar(20) // E.g., 'Monday', 'Tuesday'
-  breakfast String?  @db.Text
-  lunch     String?  @db.Text
-  dinner    String?  @db.Text
+  id         String   @id @default(uuid())
+  day        String   @unique @db.VarChar(20) // E.g., 'Monday', 'Tuesday'
+  breakfast  String?  @db.Text
+  lunch      String?  @db.Text
+  dinner     String?  @db.Text
   created_at DateTime @default(now()) @db.Timestamp(3)
   updated_at DateTime @default(now()) @updatedAt @db.Timestamp(3)
 

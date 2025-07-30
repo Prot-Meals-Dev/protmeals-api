@@ -101,7 +101,7 @@ export class OrdersService {
         coupon: true,
         order_pauses: true,
       },
-    }); 
+    });
   }
 
   async findByUser(userId: string) {
@@ -177,6 +177,7 @@ export class OrdersService {
               delivery_date: date,
               delivery_assignments_id: assignment.id,
               user_id: order.user_id,
+              meal_type: assignment.meal_type,
               delivery_partner_id: assignment.delivery_partner_id,
               order_id: order.id,
               sequence: assignment.sequence,
