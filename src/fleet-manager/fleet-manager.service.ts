@@ -101,16 +101,16 @@ export class FleetManagerService {
           end_date: { gte: startOfDay },
         }),
       user: { region_id: fleetManager.region_id },
+      assignments: {
+        some: {
+          ...(deliveryPartnerId && {
+            delivery_partner_id: deliveryPartnerId,
+          }),
+        },
+      },
     };
 
-    // If deliveryPartnerId is provided, filter orders with at least one matching assignment
-    if (deliveryPartnerId) {
-      baseWhere.assignments = {
-        some: {
-          delivery_partner_id: deliveryPartnerId,
-        },
-      };
-    }
+    console.log(baseWhere);
 
     const total = await this.prisma.orders.count({
       where: baseWhere,
@@ -136,6 +136,8 @@ export class FleetManagerService {
         },
       },
     });
+
+    console.log(orders);
 
     const dayMap = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
