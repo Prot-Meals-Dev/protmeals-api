@@ -220,7 +220,7 @@ model order_pauses {
 model weekly_menu {
   id         String   @id @default(uuid())
   day        String   @db.VarChar(20)
-  region_id  String
+  region_id  String   
   breakfast  String?  @db.Text
   lunch      String?  @db.Text
   dinner     String?  @db.Text
