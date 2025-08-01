@@ -37,7 +37,26 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   region_id?: string;
+}
+
+export class CustomerUpdateProfileDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
 
   @IsOptional()
-  priority?: number;
+  @IsEmail()
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @IsOptional()
+  @IsString()
+  profile_picture?: string;
 }

@@ -8,7 +8,7 @@ import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
-import { RegisterDto } from './dto/register.dto';
+import { RegisterDto, CustomerRegisterDto } from './dto/register.dto';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -61,10 +61,7 @@ export class AuthService {
       phone: registerDto.phone,
       role: registerDto.role,
       address: registerDto.address,
-      region_id:
-        registerDto.role === 'fleet_manager' || registerDto.role === 'client'
-          ? registerDto.region_id
-          : undefined,
+      region_id: registerDto.region_id,
     });
 
     if (registerDto.password) {
@@ -72,6 +69,30 @@ export class AuthService {
     } else {
       return await this.generateOtp(email);
     }
+  }
+
+  async customerRegister(customerRegisterDto: CustomerRegisterDto) {
+    const { email } = customerRegisterDto;
+
+    const existingUser = await this.prisma.users.findUnique({
+      where: { email },
+    });
+    if (existingUser) {
+      throw new ConflictException('Email already in use');
+    }
+
+    // Create customer user without password
+    const user = await this.usersService.create({
+      name: customerRegisterDto.name,
+      email: customerRegisterDto.email,
+      phone: customerRegisterDto.phone,
+      role: 'customer',
+      address: customerRegisterDto.address,
+      region_id: customerRegisterDto.region_id,
+    });
+
+    // Always generate OTP for customer registration
+    return await this.generateOtp(email);
   }
 
   async generateToken(user: any) {
@@ -96,7 +117,7 @@ export class AuthService {
     const user = await this.prisma.users.findUnique({ where: { email } });
 
     if (!user) {
-    throw new ConflictException("Not a Registerd User")
+      throw new ConflictException('Not a Registerd User');
     }
 
     const otp = Math.floor(100000 + Math.random() * 900000).toString();

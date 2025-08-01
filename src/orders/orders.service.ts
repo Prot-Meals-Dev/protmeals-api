@@ -5,9 +5,10 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { CreateOrderDto } from './dto/create-order.dto';
+import { CreateOrderDto, CustomerCreateOrderDto } from './dto/create-order.dto';
 import { meal_type_enum, order_status_enum } from '@prisma/client';
 import { FilterOrdersDto } from './dto/filter-orders.dto';
+import { CustomerFilterOrdersDto } from './dto/customer-filter-orders.dto';
 const dayjs = require('dayjs');
 const isSameOrBefore = require('dayjs/plugin/isSameOrBefore');
 
@@ -101,7 +102,7 @@ export class OrdersService {
         coupon: true,
         order_pauses: true,
       },
-    }); 
+    });
   }
 
   async findByUser(userId: string) {
@@ -109,6 +110,110 @@ export class OrdersService {
       where: { user_id: userId },
       include: { meal_type: true },
     });
+  }
+
+  async findCustomerOrders(
+    customerId: string,
+    filters: CustomerFilterOrdersDto,
+  ) {
+    // Verify customer exists and is a customer
+    const customer = await this.prisma.users.findUnique({
+      where: { id: customerId },
+      include: { role: true },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    if (customer.role.name !== 'customer') {
+      throw new ForbiddenException('This endpoint is only for customers');
+    }
+
+    const { startDate, endDate, status, page = 1, limit = 10 } = filters;
+    const skip = (page - 1) * limit;
+
+    // Build where clause
+    const where: any = {
+      user_id: customerId,
+    };
+
+    if (startDate) {
+      where.start_date = {
+        ...where.start_date,
+        gte: new Date(startDate),
+      };
+    }
+
+    if (endDate) {
+      where.end_date = {
+        ...where.end_date,
+        lte: new Date(endDate),
+      };
+    }
+
+    if (status) {
+      where.status = status;
+    }
+
+    // Get total count and orders
+    const [total, orders] = await Promise.all([
+      this.prisma.orders.count({ where }),
+      this.prisma.orders.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy: { created_at: 'desc' },
+        include: {
+          meal_type: {
+            select: {
+              id: true,
+              name: true,
+              breakfast_price: true,
+              lunch_price: true,
+              dinner_price: true,
+            },
+          },
+          preferences: true,
+          assignments: {
+            include: {
+              delivery_partner: {
+                select: {
+                  id: true,
+                  name: true,
+                  phone: true,
+                },
+              },
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      data: orders.map((order) => ({
+        id: order.id,
+        order_id: order.order_id,
+        delivery_address: order.delevery_address,
+        start_date: order.start_date,
+        end_date: order.end_date,
+        amount: order.amount,
+        status: order.status,
+        meal_type: order.meal_type,
+        preferences: order.preferences,
+        delivery_partners: order.assignments.map((assignment) => ({
+          meal_type: assignment.meal_type,
+          partner: assignment.delivery_partner,
+        })),
+        created_at: order.created_at,
+      })),
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
   }
 
   async updateStatus(id: string, status: order_status_enum, userId: string) {
@@ -177,6 +282,7 @@ export class OrdersService {
               delivery_date: date,
               delivery_assignments_id: assignment.id,
               user_id: order.user_id,
+              meal_type: assignment.meal_type,
               delivery_partner_id: assignment.delivery_partner_id,
               order_id: order.id,
               sequence: assignment.sequence,
@@ -276,6 +382,93 @@ export class OrdersService {
 
     await this.prisma.delivery_assignments.createMany({
       data: assignmentsData,
+    });
+
+    return order;
+  }
+
+  async createCustomerOrder(data: CustomerCreateOrderDto, customerId: string) {
+    // Validate customer exists
+    const customer = await this.prisma.users.findUnique({
+      where: { id: customerId },
+      include: { role: true },
+    });
+
+    if (!customer) {
+      throw new NotFoundException('Customer not found');
+    }
+
+    if (customer.role.name !== 'customer') {
+      throw new ForbiddenException(
+        'Only customers can create orders through this endpoint',
+      );
+    }
+
+    // Calculate amount
+    const amount = await this.calculateAmount(
+      data.meal_type_id,
+      data.meal_preferences,
+      data.start_date,
+      data.end_date,
+      data.recurring_days,
+    );
+
+    // Generate new order_id
+    const latestOrder = await this.prisma.orders.findFirst({
+      orderBy: { created_at: 'desc' },
+      select: { order_id: true },
+      where: {
+        order_id: {
+          startsWith: 'ORD-',
+        },
+      },
+    });
+
+    let nextNumber = 1;
+    if (latestOrder?.order_id) {
+      const match = latestOrder.order_id.match(/ORD-(\d+)/);
+      if (match) {
+        nextNumber = parseInt(match[1]) + 1;
+      }
+    }
+
+    const formattedOrderId = `ORD-${String(nextNumber).padStart(4, '0')}`;
+
+    // Create order without delivery partner assignment
+    const order = await this.prisma.orders.create({
+      data: {
+        order_id: formattedOrderId,
+        user_id: customerId,
+        delevery_address: data.delivery_address,
+        latitude: data.latitude || 0,
+        longitude: data.longitude || 0,
+        meal_type_id: data.meal_type_id,
+        start_date: new Date(data.start_date),
+        end_date: new Date(data.end_date),
+        amount,
+        status: order_status_enum.pending, // Orders start as pending until assigned
+        preferences: {
+          create: data.recurring_days.map((day) => ({
+            week_day: day,
+            breakfast: data.meal_preferences.breakfast,
+            lunch: data.meal_preferences.lunch,
+            dinner: data.meal_preferences.dinner,
+          })),
+        },
+      },
+      include: {
+        preferences: true,
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+            address: true,
+          },
+        },
+        meal_type: true,
+      },
     });
 
     return order;
