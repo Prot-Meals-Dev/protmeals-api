@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateUserDto, CustomerUpdateProfileDto } from './dto/update-user.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
@@ -93,8 +93,14 @@ export class UsersController {
   }
 
   @Patch('profile')
-  async updateProfile(@Request() req, @Body() updateUserDto: UpdateUserDto) {
-    const user = await this.usersService.update(req.user.id, updateUserDto);
+  async updateProfile(
+    @Request() req,
+    @Body() updateProfileDto: CustomerUpdateProfileDto,
+  ) {
+    const user = await this.usersService.updateCustomerProfile(
+      req.user.id,
+      updateProfileDto,
+    );
     req.responseMessage = 'Profile updated successfully';
     return user;
   }

@@ -9,7 +9,7 @@ export class DeliveryCronService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  @Cron(CronExpression.EVERY_10_SECONDS)
+  @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleDailyDeliveryGeneration() {
     const today = DateTime.now().toISODate(); // e.g., "2025-07-29"
 

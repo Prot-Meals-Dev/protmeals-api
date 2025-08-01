@@ -69,3 +69,39 @@ export class CreateOrderDto {
   @IsUUID()
   assigned_by: string;
 }
+
+export class  CustomerCreateOrderDto {
+  @IsString()
+  @IsNotEmpty()
+  contact_number: string;
+
+  @IsString()
+  @IsNotEmpty()
+  delivery_address: string;
+
+  @IsNumber()
+  @IsOptional()
+  latitude?: number;
+
+  @IsNumber()
+  @IsOptional()
+  longitude?: number;
+
+  @IsUUID()
+  meal_type_id: string;
+
+  @IsDateString()
+  start_date: string;
+
+  @IsDateString()
+  end_date: string;
+
+  @IsArray()
+  @ArrayNotEmpty()
+  @IsNumber({}, { each: true })
+  recurring_days: number[]; // 0 = Sun, 1 = Mon, etc.
+
+  @ValidateNested()
+  @Type(() => MealPreferencesDto)
+  meal_preferences: MealPreferencesDto;
+}

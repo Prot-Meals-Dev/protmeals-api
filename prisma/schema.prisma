@@ -7,6 +7,232 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+model roles {
+  id         String   @id @default(uuid())
+  name       String   @unique
+  created_at DateTime @default(now()) @db.Timestamp(3)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamp(3)
+  users      users[]
+}
+
+model users {
+  id               String                 @id @default(uuid())
+  name             String
+  email            String                 @unique
+  phone            String?
+  address          String?
+  status           user_status_enum       @default(active)
+  role_id          String
+  profile_picture  String?
+  region_id        String?
+  password         String?
+  created_at       DateTime               @default(now()) @db.Timestamp(3)
+  updated_at       DateTime               @default(now()) @updatedAt @db.Timestamp(3)
+  created_coupons  coupons[]              @relation("CreatedBy")
+  deliveryPartner  daily_deliveries[]     @relation("PartnerDeliveries")
+  daily_deliveries daily_deliveries[]
+  assigned_by      delivery_assignments[] @relation("AssignedByUser")
+  assignments      delivery_assignments[] @relation("PartnerAssignments")
+  orders           orders[]
+  transactions     transactions[]
+  otps             user_otps[]
+  region           regions?               @relation(fields: [region_id], references: [id])
+  role             roles                  @relation(fields: [role_id], references: [id])
+
+  @@index([region_id], map: "users_region_id_fkey")
+  @@index([role_id], map: "users_role_id_fkey")
+  @@map("users")
+}
+
+model regions {
+  id             String        @id @default(uuid())
+  name           String
+  city           String
+  state          String        @default("Kerala")
+  pincode        String        @db.VarChar(20)
+  country        String        @default("India")
+  is_serviceable Boolean       @default(true)
+  delivery_count Int           @default(0)
+  customer_count Int           @default(0)
+  created_at     DateTime      @default(now()) @db.Timestamp(3)
+  users          users[]
+  weekly_menu    weekly_menu[]
+
+  @@map("regions")
+}
+
+model meal_types {
+  id              String                 @id @default(uuid())
+  name            String
+  description     String?
+  breakfast_price Decimal                @db.Decimal(10, 2)
+  lunch_price     Decimal                @db.Decimal(10, 2)
+  dinner_price    Decimal                @db.Decimal(10, 2)
+  created_at      DateTime               @default(now()) @db.Timestamp(3)
+  assignments     delivery_assignments[]
+  orders          orders[]
+
+  @@map("meal_types")
+}
+
+model orders {
+  id               String                   @id @default(uuid())
+  user_id          String
+  order_id         String?                  @unique @db.VarChar(20)
+  meal_type_id     String?
+  delevery_address String?
+  latitude         Decimal?                 @db.Decimal(10, 6)
+  longitude        Decimal?                 @db.Decimal(10, 6)
+  status           order_status_enum        @default(active)
+  amount           Decimal
+  start_date       DateTime
+  end_date         DateTime
+  coupon_id        String?
+  created_at       DateTime                 @default(now()) @db.Timestamp(3)
+  daily_deliveries daily_deliveries[]
+  assignments      delivery_assignments[]
+  preferences      order_meal_preferences[]
+  order_pauses     order_pauses[]
+  coupon           coupons?                 @relation(fields: [coupon_id], references: [id])
+  meal_type        meal_types?              @relation(fields: [meal_type_id], references: [id])
+  user             users                    @relation(fields: [user_id], references: [id])
+  transactions     transactions[]
+
+  @@index([coupon_id], map: "orders_coupon_id_fkey")
+  @@index([meal_type_id], map: "orders_meal_type_id_fkey")
+  @@index([user_id], map: "orders_user_id_fkey")
+  @@map("orders")
+}
+
+model order_meal_preferences {
+  id        String   @id @default(uuid())
+  order_id  String
+  breakfast Boolean?
+  lunch     Boolean?
+  dinner    Boolean?
+  week_day  Int
+  order     orders   @relation(fields: [order_id], references: [id])
+
+  @@index([order_id], map: "order_meal_preferences_order_id_fkey")
+  @@map("order_meal_preferences")
+}
+
+model daily_deliveries {
+  id                      String                    @id @default(uuid())
+  delivery_partner_id     String
+  delivery_date           DateTime                  @db.Date
+  delivery_assignments_id String?
+  sequence                Int
+  created_at              DateTime                  @default(now()) @db.Timestamp(3)
+  user_id                 String
+  status                  delivery_item_status_enum @default(pending)
+  order_id                String
+  meal_type               meal_type_enum
+  assignment              delivery_assignments?     @relation(fields: [delivery_assignments_id], references: [id])
+  partner                 users                     @relation("PartnerDeliveries", fields: [delivery_partner_id], references: [id])
+  order                   orders                    @relation(fields: [order_id], references: [id])
+  user                    users                     @relation(fields: [user_id], references: [id])
+
+  @@index([delivery_assignments_id], map: "daily_deliveries_delivery_assignments_id_fkey")
+  @@index([delivery_partner_id], map: "daily_deliveries_delivery_partner_id_fkey")
+  @@index([order_id], map: "daily_deliveries_order_id_fkey")
+  @@index([user_id], map: "daily_deliveries_user_id_fkey")
+  @@map("daily_deliveries")
+}
+
+model delivery_assignments {
+  id                  String             @id @default(uuid())
+  order_id            String
+  meal_id             String
+  delivery_partner_id String
+  meal_type           meal_type_enum
+  sequence            Int
+  assigned_by         String?
+  assigned_at         DateTime           @default(now()) @db.Timestamp(3)
+  daily_delivery      daily_deliveries[]
+  assigned_by_user    users?             @relation("AssignedByUser", fields: [assigned_by], references: [id])
+  delivery_partner    users              @relation("PartnerAssignments", fields: [delivery_partner_id], references: [id])
+  meal                meal_types         @relation(fields: [meal_id], references: [id])
+  order               orders             @relation(fields: [order_id], references: [id])
+
+  @@index([assigned_by], map: "delivery_assignments_assigned_by_fkey")
+  @@index([delivery_partner_id], map: "delivery_assignments_delivery_partner_id_fkey")
+  @@index([meal_id], map: "delivery_assignments_meal_id_fkey")
+  @@index([order_id], map: "delivery_assignments_order_id_fkey")
+  @@map("delivery_assignments")
+}
+
+model transactions {
+  id           String                  @id @default(uuid())
+  order_id     String?
+  user_id      String
+  amount       Decimal
+  payment_type payment_type_enum
+  status       transaction_status_enum
+  created_at   DateTime                @default(now()) @db.Timestamp(3)
+  order        orders?                 @relation(fields: [order_id], references: [id])
+  user         users                   @relation(fields: [user_id], references: [id])
+
+  @@index([order_id], map: "transactions_order_id_fkey")
+  @@index([user_id], map: "transactions_user_id_fkey")
+  @@map("transactions")
+}
+
+model user_otps {
+  id         String   @id @default(uuid())
+  user_id    String
+  otp_secret String
+  created_at DateTime @default(now()) @db.Timestamp(3)
+  expires_at DateTime
+  user       users    @relation(fields: [user_id], references: [id])
+
+  @@index([user_id], map: "user_otps_user_id_fkey")
+  @@map("user_otps")
+}
+
+model coupons {
+  id             String             @id @default(uuid())
+  text           String             @unique
+  days_added     Int?
+  discount_price Decimal?           @db.Decimal(10, 2)
+  created_by     String
+  created_at     DateTime           @default(now()) @db.Timestamp(3)
+  expires_at     DateTime
+  status         coupon_status_enum @default(active)
+  creator        users              @relation("CreatedBy", fields: [created_by], references: [id])
+  orders         orders[]
+
+  @@index([created_by], map: "coupons_created_by_fkey")
+  @@map("coupons")
+}
+
+model order_pauses {
+  id         String   @id @default(uuid())
+  order_id   String
+  pause_date DateTime @db.Date
+  created_at DateTime @default(now()) @db.Timestamp(3)
+  order      orders   @relation(fields: [order_id], references: [id])
+
+  @@unique([order_id, pause_date])
+  @@map("order_pauses")
+}
+
+model weekly_menu {
+  id         String   @id @default(uuid())
+  day        String   @db.VarChar(20)
+  region_id  String
+  breakfast  String?  @db.Text
+  lunch      String?  @db.Text
+  dinner     String?  @db.Text
+  created_at DateTime @default(now()) @db.Timestamp(3)
+  updated_at DateTime @default(now()) @updatedAt @db.Timestamp(3)
+
+  region regions @relation(fields: [region_id], references: [id])
+
+  @@unique([day, region_id])
+  @@map("weekly_menu")
+}
+
 enum user_status_enum {
   active
   disabled
@@ -49,216 +275,4 @@ enum coupon_status_enum {
   active
   used
   expired
-}
-
-model roles {
-  id         String   @id @default(uuid())
-  name       String   @unique @db.VarChar(191)
-  created_at DateTime @default(now()) @db.Timestamp(3)
-  updated_at DateTime @default(now()) @updatedAt @db.Timestamp(3)
-  users      users[]
-}
-
-model users {
-  id              String           @id @default(uuid())
-  name            String           @db.VarChar(191)
-  email           String           @unique @db.VarChar(191)
-  phone           String?          @db.VarChar(191)
-  address         String?
-  status          user_status_enum @default(active)
-  role_id         String
-  profile_picture String?          @db.VarChar(191)
-  region_id       String?
-  password        String?          @db.VarChar(191)
-  created_at      DateTime         @default(now()) @db.Timestamp(3)
-  updated_at      DateTime         @default(now()) @updatedAt @db.Timestamp(3)
-
-  role             roles                  @relation(fields: [role_id], references: [id])
-  region           regions?               @relation(fields: [region_id], references: [id])
-  orders           orders[]
-  transactions     transactions[]
-  deliveryPartner  daily_deliveries[]     @relation("PartnerDeliveries")
-  assignments      delivery_assignments[] @relation("PartnerAssignments")
-  assigned_by      delivery_assignments[] @relation("AssignedByUser")
-  otps             user_otps[]
-  created_coupons  coupons[]              @relation("CreatedBy")
-  daily_deliveries daily_deliveries[]
-
-  @@map("users")
-}
-
-model regions {
-  id             String   @id @default(uuid())
-  name           String   @db.VarChar(191)
-  city           String   @db.VarChar(191)
-  state          String   @default("Kerala") @db.VarChar(191)
-  pincode        String   @db.VarChar(20)
-  country        String   @default("India") @db.VarChar(191)
-  is_serviceable Boolean  @default(true)
-  delivery_count Int      @default(0)
-  customer_count Int      @default(0)
-  created_at     DateTime @default(now()) @db.Timestamp(3)
-  users          users[]
-
-  @@map("regions")
-}
-
-model meal_types {
-  id              String                 @id @default(uuid())
-  name            String                 @db.VarChar(191)
-  description     String?
-  breakfast_price Decimal                @db.Decimal(10, 2)
-  lunch_price     Decimal                @db.Decimal(10, 2)
-  dinner_price    Decimal                @db.Decimal(10, 2)
-  created_at      DateTime               @default(now()) @db.Timestamp(3)
-  orders          orders[]
-  assignments     delivery_assignments[]
-
-  @@map("meal_types")
-}
-
-model orders {
-  id               String            @id @default(uuid())
-  user_id          String
-  order_id         String?           @unique @db.VarChar(20)
-  meal_type_id     String?
-  delevery_address String?
-  latitude         Decimal?          @db.Decimal(10, 6)
-  longitude        Decimal?          @db.Decimal(10, 6)
-  status           order_status_enum @default(active)
-  amount           Decimal           @db.Decimal(65, 30)
-  start_date       DateTime
-  end_date         DateTime
-  coupon_id        String?
-  created_at       DateTime          @default(now()) @db.Timestamp(3)
-
-  user             users                    @relation(fields: [user_id], references: [id])
-  meal_type        meal_types?              @relation(fields: [meal_type_id], references: [id])
-  coupon           coupons?                 @relation(fields: [coupon_id], references: [id])
-  preferences      order_meal_preferences[]
-  transactions     transactions[]
-  assignments      delivery_assignments[]
-  daily_deliveries daily_deliveries[]
-  order_pauses     order_pauses[]
-
-  @@map("orders")
-}
-
-model order_meal_preferences {
-  id        String   @id @default(uuid())
-  order_id  String
-  breakfast Boolean?
-  lunch     Boolean?
-  dinner    Boolean?
-  week_day  Int
-
-  order orders @relation(fields: [order_id], references: [id])
-
-  @@map("order_meal_preferences")
-}
-
-model daily_deliveries {
-  id                      String                    @id @default(uuid())
-  delivery_partner_id     String
-  user_id                 String
-  order_id                String
-  delivery_date           DateTime                  @db.Date
-  status                  delivery_item_status_enum @default(pending)
-  delivery_assignments_id String?
-  sequence                Int
-  meal_type               meal_type_enum
-  created_at              DateTime                  @default(now()) @db.Timestamp(3)
-
-  user       users                 @relation(fields: [user_id], references: [id])
-  partner    users                 @relation("PartnerDeliveries", fields: [delivery_partner_id], references: [id])
-  assignment delivery_assignments? @relation(fields: [delivery_assignments_id], references: [id])
-  order      orders                @relation(fields: [order_id], references: [id])
-
-  @@map("daily_deliveries")
-}
-
-model delivery_assignments {
-  id                  String         @id @default(uuid())
-  order_id            String
-  meal_id             String
-  delivery_partner_id String
-  meal_type           meal_type_enum
-  sequence            Int
-  assigned_by         String?
-  assigned_at         DateTime       @default(now()) @db.Timestamp(3)
-
-  order            orders             @relation(fields: [order_id], references: [id])
-  meal             meal_types         @relation(fields: [meal_id], references: [id])
-  delivery_partner users              @relation("PartnerAssignments", fields: [delivery_partner_id], references: [id])
-  assigned_by_user users?             @relation("AssignedByUser", fields: [assigned_by], references: [id])
-  daily_delivery   daily_deliveries[]
-
-  @@map("delivery_assignments")
-}
-
-model transactions {
-  id           String                  @id @default(uuid())
-  order_id     String?
-  user_id      String
-  amount       Decimal                 @db.Decimal(65, 30)
-  payment_type payment_type_enum
-  status       transaction_status_enum
-  created_at   DateTime                @default(now()) @db.Timestamp(3)
-
-  order orders? @relation(fields: [order_id], references: [id])
-  user  users   @relation(fields: [user_id], references: [id])
-
-  @@map("transactions")
-}
-
-model user_otps {
-  id         String   @id @default(uuid())
-  user_id    String
-  otp_secret String   @db.VarChar(191)
-  created_at DateTime @default(now()) @db.Timestamp(3)
-  expires_at DateTime
-
-  user users @relation(fields: [user_id], references: [id])
-
-  @@map("user_otps")
-}
-
-model coupons {
-  id             String             @id @default(uuid())
-  text           String             @unique @db.VarChar(191)
-  days_added     Int?
-  discount_price Decimal?           @db.Decimal(10, 2)
-  created_by     String
-  status         coupon_status_enum @default(active)
-  created_at     DateTime           @default(now()) @db.Timestamp(3)
-  expires_at     DateTime
-
-  creator users    @relation("CreatedBy", fields: [created_by], references: [id])
-  orders  orders[]
-
-  @@map("coupons")
-}
-
-model order_pauses {
-  id         String   @id @default(uuid())
-  order_id   String
-  pause_date DateTime @db.Date
-  created_at DateTime @default(now()) @db.Timestamp(3)
-
-  order orders @relation(fields: [order_id], references: [id])
-
-  @@unique([order_id, pause_date])
-  @@map("order_pauses")
-}
-
-model weekly_menu {
-  id         String   @id @default(uuid())
-  day        String   @unique @db.VarChar(20) // E.g., 'Monday', 'Tuesday'
-  breakfast  String?  @db.Text
-  lunch      String?  @db.Text
-  dinner     String?  @db.Text
-  created_at DateTime @default(now()) @db.Timestamp(3)
-  updated_at DateTime @default(now()) @updatedAt @db.Timestamp(3)
-
-  @@map("weekly_menu")
 }

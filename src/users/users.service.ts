@@ -5,7 +5,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateUserDto, CustomerUpdateProfileDto } from './dto/update-user.dto';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -222,6 +222,47 @@ export class UsersService {
       where: { id },
       data: updateData,
       include: { role: true },
+    });
+
+    const { password: _, ...result } = updatedUser;
+    return result;
+  }
+
+  async updateCustomerProfile(
+    id: string,
+    updateProfileDto: CustomerUpdateProfileDto,
+  ) {
+    // Verify user exists and is a customer
+    const user = await this.prisma.users.findUnique({
+      where: { id },
+      include: { role: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    if (user.role.name !== 'customer') {
+      throw new ConflictException(
+        'This endpoint is only for customer profile updates',
+      );
+    }
+
+    // Check if email is being updated and if it's already in use
+    if (updateProfileDto.email && updateProfileDto.email !== user.email) {
+      const existingUser = await this.prisma.users.findUnique({
+        where: { email: updateProfileDto.email },
+      });
+
+      if (existingUser) {
+        throw new ConflictException('Email already in use');
+      }
+    }
+
+    const updatedUser = await this.prisma.users.update({
+      where: { id },
+      data: updateProfileDto,
+      include: { role: true, region: true },
     });
 
     const { password: _, ...result } = updatedUser;

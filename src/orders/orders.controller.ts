@@ -11,7 +11,8 @@ import {
   ParseEnumPipe,
 } from '@nestjs/common';
 import { OrdersService } from './orders.service';
-import { CreateOrderDto } from './dto/create-order.dto';
+import { CreateOrderDto, CustomerCreateOrderDto } from './dto/create-order.dto';
+import { CustomerFilterOrdersDto } from './dto/customer-filter-orders.dto';
 import { order_status_enum } from '@prisma/client';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
@@ -26,6 +27,15 @@ export class OrdersController {
   @Post()
   async createOrder(@Body() dto: CreateOrderDto) {
     return this.ordersService.createOrder(dto);
+  }
+
+  @Post('customer')
+  async createCustomerOrder(
+    @Body() dto: CustomerCreateOrderDto,
+    @Req() req: Request,
+  ) {
+    const customerId = req.user['id'];
+    return this.ordersService.createCustomerOrder(dto, customerId);
   }
 
   @Get()
@@ -44,6 +54,15 @@ export class OrdersController {
   @Get('user/:userId')
   findByUser(@Param('userId') userId: string) {
     return this.ordersService.findByUser(userId);
+  }
+
+  @Get('customer/my-orders')
+  async getMyOrders(
+    @Query() filters: CustomerFilterOrdersDto,
+    @Req() req: Request,
+  ) {
+    const customerId = req.user['id'];
+    return this.ordersService.findCustomerOrders(customerId, filters);
   }
 
   @Patch(':id/status/:status')

@@ -11,7 +11,7 @@ import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import { OtpVerifyDto } from './dto/otp-verify.dto';
 import { EmailDto } from './dto/email.dto';
-import { RegisterDto } from './dto/register.dto';
+import { RegisterDto, CustomerRegisterDto } from './dto/register.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 
 @Controller('auth')
@@ -26,6 +26,11 @@ export class AuthController {
   @Post('register')
   async register(@Body() registerDto: RegisterDto) {
     return this.authService.register(registerDto);
+  }
+
+  @Post('customer/register')
+  async customerRegister(@Body() customerRegisterDto: CustomerRegisterDto) {
+    return this.authService.customerRegister(customerRegisterDto);
   }
 
   @Get('profile')
