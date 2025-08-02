@@ -16,6 +16,7 @@ import { FilterRegionDto } from './dto/filter-region.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
+import { Public } from 'src/common/decorators/public.decorator';
 
 @UseGuards(JwtAuthGuard)
 @Controller('regions')
@@ -29,6 +30,7 @@ export class RegionsController {
     return this.regionsService.create(dto);
   }
 
+  @Public()
   @Get()
   async findAll(@Query() filterDto: FilterRegionDto) {
     return this.regionsService.findAll(filterDto);
