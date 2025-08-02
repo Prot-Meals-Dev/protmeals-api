@@ -17,6 +17,7 @@ import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { Request } from 'express';
+import { Public } from 'src/common/decorators/public.decorator';
 
 @Controller('weekly-menu')
 @UseGuards(JwtAuthGuard)
@@ -44,8 +45,7 @@ export class WeeklyMenuController {
   }
 
   @Get('by-region/:regionId')
-  @UseGuards(RolesGuard)
-  @Roles('admin', 'fleet_manager')
+  @Public()
   findByRegion(@Param('regionId') regionId: string) {
     return this.weeklyMenuService.findByRegion(regionId);
   }
