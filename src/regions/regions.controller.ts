@@ -13,6 +13,7 @@ import { RegionsService } from './regions.service';
 import { CreateRegionDto } from './dto/create-region.dto';
 import { UpdateRegionDto } from './dto/update-region.dto';
 import { FilterRegionDto } from './dto/filter-region.dto';
+import { ChangeRegionStatusDto } from './dto/change-region-status.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
@@ -36,6 +37,17 @@ export class RegionsController {
     return this.regionsService.findAll(filterDto);
   }
 
+  @Public()
+  @Get('serviceable')
+  async findServiceableRegions(
+    @Query('includeNonServiceable') includeNonServiceable?: string,
+  ) {
+    const includeNonServiceableBool = includeNonServiceable === 'true';
+    return this.regionsService.findServiceableRegions(
+      includeNonServiceableBool,
+    );
+  }
+
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.regionsService.findOne(id);
@@ -46,6 +58,16 @@ export class RegionsController {
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateRegionDto) {
     return this.regionsService.update(id, dto);
+  }
+
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  @Patch(':id/status')
+  changeRegionStatus(
+    @Param('id') id: string,
+    @Body() changeStatusDto: ChangeRegionStatusDto,
+  ) {
+    return this.regionsService.changeRegionStatus(id, changeStatusDto);
   }
 
   @UseGuards(RolesGuard)

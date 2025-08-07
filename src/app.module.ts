@@ -15,7 +15,7 @@ import { RegionsModule } from './regions/regions.module';
 import { CouponsModule } from './coupons/coupons.module';
 import { AdminModule } from './admin/admin.module';
 import { WeeklyMenuModule } from './weekly-menu/weekly-menu.module';
-
+import { AnalyticsModule } from './analytics/analytics.module';
 
 @Module({
   imports: [
@@ -36,6 +36,7 @@ import { WeeklyMenuModule } from './weekly-menu/weekly-menu.module';
     CouponsModule,
     AdminModule,
     WeeklyMenuModule,
+    AnalyticsModule,
   ],
 })
 export class AppModule {}
