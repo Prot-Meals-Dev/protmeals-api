@@ -6,6 +6,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto, CustomerUpdateProfileDto } from './dto/update-user.dto';
+import { ChangeUserStatusDto } from './dto/change-user-status.dto';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -161,6 +162,32 @@ export class UsersService {
     });
   }
 
+  async findFleetManagers(includeDisabled: boolean = false) {
+    const where: any = {
+      role: { name: 'fleet_manager' },
+    };
+
+    if (!includeDisabled) {
+      where.status = 'active';
+    }
+
+    return this.prisma.users.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        status: true,
+        region: true,
+        role: true,
+        created_at: true,
+        updated_at: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async findallroles() {
     return this.prisma.roles.findMany({
       select: { id: true, name: true },
@@ -267,6 +294,62 @@ export class UsersService {
 
     const { password: _, ...result } = updatedUser;
     return result;
+  }
+
+  async changeUserStatus(id: string, changeStatusDto: ChangeUserStatusDto) {
+    // Verify user exists
+    const user = await this.findOne(id);
+
+    // Update user status
+    const updatedUser = await this.prisma.users.update({
+      where: { id },
+      data: {
+        status: changeStatusDto.status,
+      },
+      include: { role: true, region: true },
+    });
+
+    const { password: _, ...result } = updatedUser;
+    return {
+      ...result,
+      statusChangeReason: changeStatusDto.reason,
+      message: `User status changed to ${changeStatusDto.status}`,
+    };
+  }
+
+  async changeFleetManagerStatus(
+    id: string,
+    changeStatusDto: ChangeUserStatusDto,
+  ) {
+    // Verify user exists and is a fleet manager
+    const user = await this.prisma.users.findUnique({
+      where: { id },
+      include: { role: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    if (user.role.name !== 'fleet_manager') {
+      throw new ConflictException('This endpoint is only for fleet managers');
+    }
+
+    // Update fleet manager status
+    const updatedUser = await this.prisma.users.update({
+      where: { id },
+      data: {
+        status: changeStatusDto.status,
+      },
+      include: { role: true, region: true },
+    });
+
+    const { password: _, ...result } = updatedUser;
+    return {
+      ...result,
+      statusChangeReason: changeStatusDto.reason,
+      message: `Fleet manager status changed to ${changeStatusDto.status}`,
+    };
   }
 
   async remove(id: string) {
