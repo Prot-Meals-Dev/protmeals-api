@@ -116,6 +116,48 @@ export class AuthService {
     };
   }
 
+  // Test OTP bypass helpers
+  private isTestOtpBypassEnabled(): boolean {
+    // Enabled by default in non-production. In production, requires OTP_TEST_ENABLE=true
+    const enabledFlag = process.env.OTP_TEST_ENABLE === 'true';
+    return process.env.NODE_ENV !== 'production' || enabledFlag;
+  }
+
+  private getTestOtp(): string {
+    // Default test OTP if not provided via env
+    return process.env.OTP_TEST_CODE || process.env.TEST_OTP_CODE || '123456';
+  }
+
+  private isTestEmailAllowedForBypass(email: string): boolean {
+    // If emails not configured, allow all in non-production
+    const emailsEnv = process.env.OTP_TEST_EMAILS || '';
+    const domainsEnv = process.env.OTP_TEST_DOMAINS || '';
+
+    if (!emailsEnv && !domainsEnv) {
+      return process.env.NODE_ENV !== 'production';
+    }
+
+    const emails = emailsEnv
+      .split(',')
+      .map((e) => e.trim().toLowerCase())
+      .filter(Boolean);
+    const domains = domainsEnv
+      .split(',')
+      .map((d) => d.trim().toLowerCase())
+      .filter(Boolean);
+
+    const lower = email.toLowerCase();
+    if (emails.includes('*') || emails.includes(lower)) return true;
+
+    const at = lower.lastIndexOf('@');
+    if (at !== -1) {
+      const domain = lower.substring(at + 1);
+      if (domains.includes(domain)) return true;
+    }
+
+    return false;
+  }
+
   async generateOtp(email: string) {
     const user = await this.prisma.users.findUnique({ where: { email } });
 
@@ -123,38 +165,38 @@ export class AuthService {
       throw new ConflictException('Not a Registerd User');
     }
 
-    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    // Support test OTP bypass
+    const useBypass =
+      this.isTestOtpBypassEnabled() && this.isTestEmailAllowedForBypass(email);
+    const generatedOtp = useBypass
+      ? this.getTestOtp()
+      : Math.floor(100000 + Math.random() * 900000).toString();
+
     const expiry = new Date();
     expiry.setMinutes(expiry.getMinutes() + 15);
 
-    // Upsert using composite unique key (user_id)
+    // Upsert OTP
     const existingOtp = await this.prisma.user_otps.findFirst({
       where: { user_id: user.id },
     });
-
     if (existingOtp) {
       await this.prisma.user_otps.update({
         where: { id: existingOtp.id },
-        data: {
-          otp_secret: otp,
-          expires_at: expiry,
-        },
+        data: { otp_secret: generatedOtp, expires_at: expiry },
       });
     } else {
       await this.prisma.user_otps.create({
         data: {
           user_id: user.id,
-          otp_secret: otp,
+          otp_secret: generatedOtp,
           expires_at: expiry,
         },
       });
     }
 
-    if (process.env.NODE_ENV !== 'production') {
-      return {
-        message: 'OTP generated (development mode)',
-        otp,
-      };
+    // In non-production or when bypass enabled, return OTP for testing
+    if (useBypass || process.env.NODE_ENV !== 'production') {
+      return { message: 'OTP generated (test mode)', otp: generatedOtp };
     }
 
     return { message: 'OTP sent to your email' };
@@ -168,22 +210,37 @@ export class AuthService {
 
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
-    const userOtp = await this.prisma.user_otps.findFirst({
-      where: { user_id: user.id },
-    });
+    const useBypass =
+      this.isTestOtpBypassEnabled() && this.isTestEmailAllowedForBypass(email);
+    const testOtp = this.getTestOtp();
 
-    if (!userOtp || userOtp.otp_secret !== otp) {
+    let valid = false;
+
+    // If bypass is enabled and test OTP matches, consider it valid
+    if (useBypass && otp === testOtp) {
+      valid = true;
+    } else {
+      // Otherwise, validate against stored OTP
+      const userOtp = await this.prisma.user_otps.findFirst({
+        where: { user_id: user.id },
+      });
+
+      if (!userOtp || userOtp.otp_secret !== otp) {
+        throw new UnauthorizedException('Invalid OTP');
+      }
+
+      if (new Date() > userOtp.expires_at) {
+        throw new UnauthorizedException('OTP has expired');
+      }
+
+      // Delete OTP entry after successful validation
+      await this.prisma.user_otps.delete({ where: { id: userOtp.id } });
+      valid = true;
+    }
+
+    if (!valid) {
       throw new UnauthorizedException('Invalid OTP');
     }
-
-    if (new Date() > userOtp.expires_at) {
-      throw new UnauthorizedException('OTP has expired');
-    }
-
-    // Delete OTP entry after successful validation
-    await this.prisma.user_otps.delete({
-      where: { id: userOtp.id },
-    });
 
     return this.generateToken(user);
   }
