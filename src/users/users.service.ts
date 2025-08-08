@@ -201,6 +201,7 @@ export class UsersService {
         id: true,
         name: true,
         email: true,
+        address: true,
         phone: true,
         status: true,
         role_id: true,
