@@ -41,6 +41,9 @@ export class AuthService {
   async login(loginDto: LoginDto) {
     const user = await this.validateUser(loginDto.email, loginDto.password);
     if (!user) throw new UnauthorizedException('Invalid credentials');
+    if (user.status !== 'active') {
+      throw new ConflictException('Not an active user');
+    }
     return this.generateToken(user);
   }
 
@@ -163,6 +166,10 @@ export class AuthService {
 
     if (!user) {
       throw new ConflictException('Not a Registerd User');
+    }
+
+    if (user.status !== 'active') {
+      throw new ConflictException('Not an active user');
     }
 
     // Support test OTP bypass
