@@ -11,6 +11,7 @@ import {
   meal_type_enum,
   order_status_enum,
   payment_status_enum,
+  payment_type_enum,
 } from '@prisma/client';
 import { FilterOrdersDto } from './dto/filter-orders.dto';
 import { CustomerFilterOrdersDto } from './dto/customer-filter-orders.dto';
@@ -442,7 +443,7 @@ export class OrdersService {
 
     const formattedOrderId = `ORD-${String(nextNumber).padStart(4, '0')}`;
 
-    // Create order without delivery partner assignment
+    // If payment_type present or defaulting to one_time, integrate checkout here
     const order = await this.prisma.orders.create({
       data: {
         order_id: formattedOrderId,
@@ -454,7 +455,8 @@ export class OrdersService {
         start_date: new Date(data.start_date),
         end_date: new Date(data.end_date),
         amount,
-        status: order_status_enum.pending, // Orders start as pending until assigned
+        status: order_status_enum.pending,
+        payment_status: payment_status_enum.pending,
         preferences: {
           create: data.recurring_days.map((day) => ({
             week_day: day,
@@ -465,24 +467,58 @@ export class OrdersService {
         },
       },
       include: {
-        preferences: true,
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            phone: true,
-            address: true,
-          },
-        },
-        meal_type: true,
+        user: true,
       },
     });
 
-    return order;
+    // Create a pending transaction
+    const paymentType: payment_type_enum =
+      (data.payment_type as payment_type_enum) || payment_type_enum.one_time;
+    const txn = await this.prisma.transactions.create({
+      data: {
+        order_id: order.id,
+        user_id: customerId,
+        amount,
+        currency: process.env.RAZORPAY_CURRENCY || 'INR',
+        payment_type: paymentType as any,
+        status: 'pending',
+        provider: 'razorpay',
+        receipt: `rcpt_${order.id}`,
+        notes: { orderId: order.id, userId: customerId },
+      },
+    });
+
+    // Create Razorpay order and return checkout payload
+    const rpOrder = await this.payments.createRazorpayOrder(
+      amount,
+      txn.receipt!,
+      { transactionId: txn.id },
+    );
+
+    await this.prisma.transactions.update({
+      where: { id: txn.id },
+      data: { provider_order_id: rpOrder.id },
+    });
+
+    return {
+      keyId: process.env.RAZORPAY_KEY_ID,
+      razorpay_order_id: rpOrder.id,
+      amount: rpOrder.amount,
+      currency: rpOrder.currency,
+      name: 'ProtMeals',
+      description: 'Meal plan payment',
+      prefill: {
+        name: order.user?.name,
+        email: order.user?.email,
+        contact: order.user?.phone,
+      },
+      notes: rpOrder.notes,
+      transactionId: txn.id,
+      order_id: order.order_id,
+    };
   }
 
-  // New: create checkout session for customer order
+  // Deprecated: handled by createCustomerOrder now
   async createCustomerCheckout(
     data: CustomerCreateOrderDto,
     customerId: string,
