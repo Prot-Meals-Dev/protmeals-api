@@ -112,8 +112,21 @@ export class PaymentsController {
       const rpOrder = event.payload?.order?.entity;
       const receipt: string | undefined = rpOrder?.receipt;
       if (receipt?.startsWith('rcpt_')) {
-        const internalOrderId = receipt.substring(5);
-        await activateOrderByInternalOrderId(internalOrderId);
+        const compact = receipt.substring(5); // hyphenless UUID stored in receipt
+        // Find the pending transaction whose order id compact matches
+        const txn = await this.prisma.transactions.findFirst({
+          where: {
+            status: 'pending',
+            order: {
+              id: {
+                // Prisma does not support regex here; use contains fallback
+                contains: compact,
+              },
+            },
+          },
+          include: { order: { include: { user: true } } },
+        });
+        if (txn?.order?.id) await activateOrderByInternalOrderId(txn.order.id);
       }
     }
 
