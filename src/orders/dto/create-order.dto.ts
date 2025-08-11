@@ -70,7 +70,7 @@ export class CreateOrderDto {
   assigned_by: string;
 }
 
-export class  CustomerCreateOrderDto {
+export class CustomerCreateOrderDto {
   @IsString()
   @IsNotEmpty()
   contact_number: string;
@@ -104,4 +104,8 @@ export class  CustomerCreateOrderDto {
   @ValidateNested()
   @Type(() => MealPreferencesDto)
   meal_preferences: MealPreferencesDto;
+
+  @IsOptional()
+  @IsString()
+  payment_type?: 'one_time' | 'subscription';
 }

@@ -38,16 +38,6 @@ export class OrdersController {
     return this.ordersService.createCustomerOrder(dto, customerId);
   }
 
-  // New: create Razorpay checkout for customer order
-  @Post('customer/checkout')
-  async createCustomerCheckout(
-    @Body() dto: CustomerCreateOrderDto,
-    @Req() req: Request,
-  ) {
-    const customerId = req.user['id'];
-    return this.ordersService.createCustomerCheckout(dto, customerId);
-  }
-
   @Get()
   findAll(
     @Query('deliveryPartnerId') deliveryPartnerId?: string,
