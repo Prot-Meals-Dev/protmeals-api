@@ -31,9 +31,11 @@ export class AnalyticsService {
       };
     }
 
-    if (regionId) {
+    if (regionId && regionId !== 'all') {
       whereClause.user = {
-        region_id: regionId,
+        is: {
+          region_id: regionId,
+        },
       };
     }
 
@@ -93,9 +95,11 @@ export class AnalyticsService {
       };
     }
 
-    if (regionId) {
+    if (regionId && regionId !== 'all') {
       whereClause.user = {
-        region_id: regionId,
+        is: {
+          region_id: regionId,
+        },
       };
     }
 
@@ -173,9 +177,11 @@ export class AnalyticsService {
       },
     };
 
-    if (regionId) {
+    if (regionId && regionId !== 'all') {
       whereClause.user = {
-        region_id: regionId,
+        is: {
+          region_id: regionId,
+        },
       };
     }
 
@@ -274,9 +280,11 @@ export class AnalyticsService {
       };
     }
 
-    if (regionId) {
+    if (regionId && regionId !== 'all') {
       whereClause.user = {
-        region_id: regionId,
+        is: {
+          region_id: regionId,
+        },
       };
     }
 
