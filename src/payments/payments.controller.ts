@@ -12,6 +12,7 @@ export class PaymentsController {
   ) {}
 
   // This endpoint verifies the payment and activates the order
+  @UseGuards(JwtAuthGuard)
   @Post('razorpay/verify')
   async verifyRazorpay(@Body() dto: VerifyRazorpayDto, @Req() req: any) {
     const userId = req.user.id;
