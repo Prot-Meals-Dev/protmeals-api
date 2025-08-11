@@ -84,6 +84,7 @@ model orders {
   latitude         Decimal?                 @db.Decimal(10, 6)
   longitude        Decimal?                 @db.Decimal(10, 6)
   status           order_status_enum        @default(active)
+  payment_status   payment_status_enum      @default(pending)
   amount           Decimal
   start_date       DateTime
   end_date         DateTime
@@ -163,15 +164,24 @@ model delivery_assignments {
 }
 
 model transactions {
-  id           String                  @id @default(uuid())
-  order_id     String?
-  user_id      String
-  amount       Decimal
-  payment_type payment_type_enum
-  status       transaction_status_enum
-  created_at   DateTime                @default(now()) @db.Timestamp(3)
-  order        orders?                 @relation(fields: [order_id], references: [id])
-  user         users                   @relation(fields: [user_id], references: [id])
+  id                  String                  @id @default(uuid())
+  order_id            String?
+  user_id             String
+  amount              Decimal
+  currency            String                  @default("INR")
+  payment_type        payment_type_enum
+  status              transaction_status_enum
+  provider            String                  @default("razorpay")
+  provider_order_id   String?                 @unique
+  provider_payment_id String?
+  provider_signature  String?
+  receipt             String?
+  notes               Json?
+  error_code          String?
+  error_description   String?
+  created_at          DateTime                @default(now()) @db.Timestamp(3)
+  order               orders?                 @relation(fields: [order_id], references: [id])
+  user                users                   @relation(fields: [user_id], references: [id])
 
   @@index([order_id], map: "transactions_order_id_fkey")
   @@index([user_id], map: "transactions_user_id_fkey")
@@ -220,7 +230,7 @@ model order_pauses {
 model weekly_menu {
   id         String   @id @default(uuid())
   day        String   @db.VarChar(20)
-  region_id  String   
+  region_id  String
   breakfast  String?  @db.Text
   lunch      String?  @db.Text
   dinner     String?  @db.Text
@@ -247,6 +257,13 @@ enum transaction_status_enum {
 enum payment_type_enum {
   one_time
   subscription
+}
+
+enum payment_status_enum {
+  pending
+  paid
+  failed
+  refunded
 }
 
 enum order_status_enum {

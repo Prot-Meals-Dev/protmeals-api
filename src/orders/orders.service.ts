@@ -5,8 +5,13 @@ import {
   ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { PaymentsService } from 'src/payments/payments.service';
 import { CreateOrderDto, CustomerCreateOrderDto } from './dto/create-order.dto';
-import { meal_type_enum, order_status_enum } from '@prisma/client';
+import {
+  meal_type_enum,
+  order_status_enum,
+  payment_status_enum,
+} from '@prisma/client';
 import { FilterOrdersDto } from './dto/filter-orders.dto';
 import { CustomerFilterOrdersDto } from './dto/customer-filter-orders.dto';
 const dayjs = require('dayjs');
@@ -16,7 +21,10 @@ dayjs.extend(isSameOrBefore);
 
 @Injectable()
 export class OrdersService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private payments: PaymentsService,
+  ) {}
 
   async findAll(filters: {
     deliveryPartnerId?: string;
@@ -472,6 +480,98 @@ export class OrdersService {
     });
 
     return order;
+  }
+
+  // New: create checkout session for customer order
+  async createCustomerCheckout(
+    data: CustomerCreateOrderDto,
+    customerId: string,
+  ) {
+    // Validate and compute amount (reusing logic)
+    const amount = await this.calculateAmount(
+      data.meal_type_id,
+      data.meal_preferences,
+      data.start_date,
+      data.end_date,
+      data.recurring_days,
+    );
+
+    // Create a pending order (not active, payment pending)
+    const order = await this.prisma.orders.create({
+      data: {
+        user_id: customerId,
+        delevery_address: data.delivery_address,
+        latitude: data.latitude || 0,
+        longitude: data.longitude || 0,
+        meal_type_id: data.meal_type_id,
+        start_date: new Date(data.start_date),
+        end_date: new Date(data.end_date),
+        amount,
+        status: order_status_enum.pending,
+        payment_status: payment_status_enum.pending,
+        preferences: {
+          create: data.recurring_days.map((day) => ({
+            week_day: day,
+            breakfast: data.meal_preferences.breakfast,
+            lunch: data.meal_preferences.lunch,
+            dinner: data.meal_preferences.dinner,
+          })),
+        },
+      },
+      include: {
+        user: true,
+      },
+    });
+
+    // Create a pending transaction
+    const txn = await this.prisma.transactions.create({
+      data: {
+        order_id: order.id,
+        user_id: customerId,
+        amount,
+        currency: process.env.RAZORPAY_CURRENCY || 'INR',
+        payment_type: 'one_time',
+        status: 'pending',
+        provider: 'razorpay',
+        receipt: `rcpt_${order.id}`,
+        notes: {
+          orderId: order.id,
+          userId: customerId,
+        },
+      },
+    });
+
+    // Create Razorpay order
+    const rpOrder = await this.payments.createRazorpayOrder(
+      amount,
+      txn.receipt!,
+      {
+        transactionId: txn.id,
+      },
+    );
+
+    // Save provider order id
+    await this.prisma.transactions.update({
+      where: { id: txn.id },
+      data: { provider_order_id: rpOrder.id } as any,
+    });
+
+    // Return checkout payload
+    return {
+      keyId: process.env.RAZORPAY_KEY_ID,
+      razorpay_order_id: rpOrder.id,
+      amount: rpOrder.amount,
+      currency: rpOrder.currency,
+      name: 'ProtMeals',
+      description: 'Meal plan payment',
+      prefill: {
+        name: order.user?.name,
+        email: order.user?.email,
+        contact: order.user?.phone,
+      },
+      notes: rpOrder.notes,
+      transactionId: txn.id,
+    };
   }
 
   async calculateAmount(

@@ -152,6 +152,7 @@ export class AdminService {
           : 0;
 
       return {
+        region_id: region.id,
         region: region.name,
         pincode: region.pincode,
         revenue: currentRevenue,
