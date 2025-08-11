@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
 import { WeeklyMenuService } from './weekly-menu.service';
 import { WeeklyMenuController } from './weekly-menu.controller';
-import { PrismaService } from 'src/prisma/prisma.service';
+import { PrismaModule } from 'src/prisma/prisma.module';
 
 @Module({
+  imports: [PrismaModule],
   controllers: [WeeklyMenuController],
-  providers: [WeeklyMenuService, PrismaService],
+  providers: [WeeklyMenuService],
 })
 export class WeeklyMenuModule {}

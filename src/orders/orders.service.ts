@@ -483,7 +483,8 @@ export class OrdersService {
         payment_type: paymentType as any,
         status: 'pending',
         provider: 'razorpay',
-        receipt: `rcpt_${order.id}`,
+        // Razorpay receipt max length 40. Use compact id (no hyphens).
+        receipt: `rcpt_${order.id.replace(/-/g, '').slice(0, 32)}`,
         notes: { orderId: order.id, userId: customerId },
       },
     });
@@ -569,7 +570,8 @@ export class OrdersService {
         payment_type: 'one_time',
         status: 'pending',
         provider: 'razorpay',
-        receipt: `rcpt_${order.id}`,
+        // Razorpay receipt max length 40. Use compact id (no hyphens).
+        receipt: `rcpt_${order.id.replace(/-/g, '').slice(0, 32)}`,
         notes: {
           orderId: order.id,
           userId: customerId,
