@@ -12,7 +12,8 @@ import {
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateUserDto, CustomerUpdateProfileDto } from './dto/update-user.dto';
+import { ChangeUserStatusDto } from './dto/change-user-status.dto';
 import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
@@ -35,10 +36,21 @@ export class UsersController {
   @Get()
   @UseGuards(RolesGuard)
   @Roles('admin')
-  async findAll(@Request() req, @Query('role') role?: string) {
-    const users = role
-      ? await this.usersService.findByRole(role, req.user.id)
-      : await this.usersService.findAll();
+  async findAll(
+    @Request() req,
+    @Query('role') role?: string,
+    @Query('status') status?: string,
+    @Query('region_id') region_id?: string,
+    @Query('search') search?: string,
+  ) {
+    const users = await this.usersService.findAllWithFilters({  
+      role,
+      status,
+      region_id,
+      search,
+      requester_id: req.user.id,
+    });
+
     req.responseMessage = 'Users found';
     return users;
   }
@@ -67,6 +79,20 @@ export class UsersController {
     return staff;
   }
 
+  @Get('fleet-managers')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  async findFleetManagers(
+    @Request() req,
+    @Query('includeDisabled') includeDisabled?: string,
+  ) {
+    const includeDisabledBool = includeDisabled === 'true';
+    const fleetManagers =
+      await this.usersService.findFleetManagers(includeDisabledBool);
+    req.responseMessage = 'Fleet managers found';
+    return fleetManagers;
+  }
+
   @Get('profile')
   async getProfile(@Request() req) {
     const user = await this.usersService.findOne(req.user.id);
@@ -82,8 +108,14 @@ export class UsersController {
   }
 
   @Patch('profile')
-  async updateProfile(@Request() req, @Body() updateUserDto: UpdateUserDto) {
-    const user = await this.usersService.update(req.user.id, updateUserDto);
+  async updateProfile(
+    @Request() req,
+    @Body() updateProfileDto: CustomerUpdateProfileDto,
+  ) {
+    const user = await this.usersService.updateCustomerProfile(
+      req.user.id,
+      updateProfileDto,
+    );
     req.responseMessage = 'Profile updated successfully';
     return user;
   }
@@ -99,6 +131,38 @@ export class UsersController {
     const updated = await this.usersService.update(id, updateUserDto);
     req.responseMessage = 'User updated successfully';
     return updated;
+  }
+
+  @Patch(':id/status')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  async changeUserStatus(
+    @Request() req,
+    @Param('id') id: string,
+    @Body() changeStatusDto: ChangeUserStatusDto,
+  ) {
+    const result = await this.usersService.changeUserStatus(
+      id,
+      changeStatusDto,
+    );
+    req.responseMessage = 'User status updated successfully';
+    return result;
+  }
+
+  @Patch('fleet-manager/:id/status')
+  @UseGuards(RolesGuard)
+  @Roles('admin')
+  async changeFleetManagerStatus(
+    @Request() req,
+    @Param('id') id: string,
+    @Body() changeStatusDto: ChangeUserStatusDto,
+  ) {
+    const result = await this.usersService.changeFleetManagerStatus(
+      id,
+      changeStatusDto,
+    );
+    req.responseMessage = 'Fleet manager status updated successfully';
+    return result;
   }
 
   @Delete(':id')

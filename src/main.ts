@@ -10,9 +10,11 @@ async function bootstrap() {
   // Global prefix
   app.setGlobalPrefix('v1');
 
-  // Stripe webhook needs raw body
+  app.enableCors();
+
+  // Webhook endpoints need raw body for signature verification
   app.use(
-    '/api/webhooks/stripe',
+    ['/api/webhooks/stripe', '/v1/payments/webhooks/razorpay'],
     json({
       verify: (req: any, res, buf) => {
         req.rawBody = buf;
@@ -33,7 +35,6 @@ async function bootstrap() {
     }),
   );
 
-  app.enableCors();
   app.useGlobalInterceptors(new ResponseInterceptor());
 
   await app.listen(process.env.PORT || 3000);

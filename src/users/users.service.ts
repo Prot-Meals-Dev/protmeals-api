@@ -5,7 +5,8 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateUserDto } from './dto/create-user.dto';
-import { UpdateUserDto } from './dto/update-user.dto';
+import { UpdateUserDto, CustomerUpdateProfileDto } from './dto/update-user.dto';
+import { ChangeUserStatusDto } from './dto/change-user-status.dto';
 import * as bcrypt from 'bcrypt';
 
 @Injectable()
@@ -13,50 +14,54 @@ export class UsersService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(createUserDto: CreateUserDto) {
-    const {
-      email,
-      password,
-      role: roleName,
-      priority: inputPriority,
-    } = createUserDto;
+    const { email, password, name, phone, address, role, region_id } =
+      createUserDto;
+    let hashedPassword;
+    if (password) {
+      hashedPassword = await bcrypt.hash(password, 10);
+    }
+    const roleData = await this.prisma.roles.findFirst({
+      where: { name: role },
+    });
+    if (!roleData) {
+      throw new NotFoundException('Role not found');
+    }
+    if ((role === 'fleet_manager' || role === 'client') && !region_id) {
+      // ✅ Enforce region_id for specific roles
+      throw new ConflictException(`region_id is required for role: ${role}`);
+    }
+
+    // ✅ Optional: validate region existence
+    if (region_id) {
+      const regionExists = await this.prisma.regions.findUnique({
+        where: { id: region_id },
+      });
+      if (!regionExists) {
+        throw new ConflictException(`Region not found`);
+      }
+    }
 
     const existingUser = await this.prisma.users.findUnique({
       where: { email },
     });
-    if (existingUser) throw new ConflictException('Email already in use');
 
-    const role = await this.prisma.roles.findUnique({
-      where: { name: roleName },
-    });
-    if (!role) {
-      throw new ConflictException(
-        `Invalid role. Available roles: 'admin', 'staff', 'customer'`,
-      );
+    if (existingUser) {
+      throw new ConflictException('Email already in use');
     }
 
-    delete createUserDto.role;
-
-    if (inputPriority && role.name === 'staff') {
-      const totalStaff = await this.prisma.users.count({
-        where: { role_id: role.id }, // fixed: roleId → role_id
-      });
-      const finalPriority = Math.min(inputPriority, totalStaff + 1);
-      createUserDto.priority = finalPriority;
-    }
-
-    const hashedPassword = password ? await bcrypt.hash(password, 10) : null;
-
-    const user = await this.prisma.users.create({
+    const newUser = await this.prisma.users.create({
       data: {
-        ...createUserDto,
-        password: hashedPassword,
-        role: { connect: { id: role.id } },
+        name,
+        email,
+        password: hashedPassword ? hashedPassword : null,
+        phone,
+        address,
+        role: { connect: { id: roleData.id } },
+        ...(region_id && { region: { connect: { id: region_id } } }), // ✅ correct
       },
-      include: { role: true },
     });
 
-    const { password: _, ...result } = user;
-    return result;
+    return newUser;
   }
 
   async findAll() {
@@ -67,7 +72,7 @@ export class UsersService {
         email: true,
         phone: true,
         status: true,
-        role_id: true, // fixed: roleId → role_id
+        region: true,
         role: true,
         created_at: true, // fixed: createdAt → created_at
         updated_at: true, // fixed: updatedAt → updated_at
@@ -101,6 +106,88 @@ export class UsersService {
     });
   }
 
+  async findAllWithFilters(filters: {
+    role?: string;
+    status?: string;
+    region_id?: string;
+    search?: string;
+    requester_id?: string;
+  }) {
+    const { role, status, region_id, search, requester_id } = filters;
+
+    const user = await this.prisma.users.findUnique({
+      where: { id: requester_id },
+    });
+
+    const where: any = {};
+
+    // region-based filtering for non-global roles
+    if (user?.region_id) {
+      where.region_id = user.region_id;
+    }
+
+    if (role) {
+      where.role = { name: role };
+    }
+
+    if (status) {
+      where.status = status;
+    }
+
+    if (region_id) {
+      where.region_id = region_id;
+    }
+
+    if (search) {
+      where.OR = [
+        { name: { contains: search, mode: 'insensitive' } },
+        { email: { contains: search, mode: 'insensitive' } },
+        { phone: { contains: search, mode: 'insensitive' } },
+      ];
+    }
+
+    return this.prisma.users.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        status: true,
+        region: true,
+        role: true,
+        created_at: true,
+        updated_at: true,
+      },
+    });
+  }
+
+  async findFleetManagers(includeDisabled: boolean = false) {
+    const where: any = {
+      role: { name: 'fleet_manager' },
+    };
+
+    if (!includeDisabled) {
+      where.status = 'active';
+    }
+
+    return this.prisma.users.findMany({
+      where,
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        phone: true,
+        status: true,
+        region: true,
+        role: true,
+        created_at: true,
+        updated_at: true,
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   async findallroles() {
     return this.prisma.roles.findMany({
       select: { id: true, name: true },
@@ -114,6 +201,7 @@ export class UsersService {
         id: true,
         name: true,
         email: true,
+        address: true,
         phone: true,
         status: true,
         role_id: true,
@@ -166,6 +254,103 @@ export class UsersService {
 
     const { password: _, ...result } = updatedUser;
     return result;
+  }
+
+  async updateCustomerProfile(
+    id: string,
+    updateProfileDto: CustomerUpdateProfileDto,
+  ) {
+    // Verify user exists and is a customer
+    const user = await this.prisma.users.findUnique({
+      where: { id },
+      include: { role: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    if (user.role.name !== 'customer') {
+      throw new ConflictException(
+        'This endpoint is only for customer profile updates',
+      );
+    }
+
+    // Check if email is being updated and if it's already in use
+    if (updateProfileDto.email && updateProfileDto.email !== user.email) {
+      const existingUser = await this.prisma.users.findUnique({
+        where: { email: updateProfileDto.email },
+      });
+
+      if (existingUser) {
+        throw new ConflictException('Email already in use');
+      }
+    }
+
+    const updatedUser = await this.prisma.users.update({
+      where: { id },
+      data: updateProfileDto,
+      include: { role: true, region: true },
+    });
+
+    const { password: _, ...result } = updatedUser;
+    return result;
+  }
+
+  async changeUserStatus(id: string, changeStatusDto: ChangeUserStatusDto) {
+    // Verify user exists
+    const user = await this.findOne(id);
+
+    // Update user status
+    const updatedUser = await this.prisma.users.update({
+      where: { id },
+      data: {
+        status: changeStatusDto.status,
+      },
+      include: { role: true, region: true },
+    });
+
+    const { password: _, ...result } = updatedUser;
+    return {
+      ...result,
+      statusChangeReason: changeStatusDto.reason,
+      message: `User status changed to ${changeStatusDto.status}`,
+    };
+  }
+
+  async changeFleetManagerStatus(
+    id: string,
+    changeStatusDto: ChangeUserStatusDto,
+  ) {
+    // Verify user exists and is a fleet manager
+    const user = await this.prisma.users.findUnique({
+      where: { id },
+      include: { role: true },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User with ID ${id} not found`);
+    }
+
+    if (user.role.name !== 'fleet_manager') {
+      throw new ConflictException('This endpoint is only for fleet managers');
+    }
+
+    // Update fleet manager status
+    const updatedUser = await this.prisma.users.update({
+      where: { id },
+      data: {
+        status: changeStatusDto.status,
+      },
+      include: { role: true, region: true },
+    });
+
+    const { password: _, ...result } = updatedUser;
+    return {
+      ...result,
+      statusChangeReason: changeStatusDto.reason,
+      message: `Fleet manager status changed to ${changeStatusDto.status}`,
+    };
   }
 
   async remove(id: string) {

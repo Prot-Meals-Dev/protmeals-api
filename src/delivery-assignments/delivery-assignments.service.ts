@@ -1,20 +1,49 @@
-import { Injectable } from '@nestjs/common';
+import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as dayjs from 'dayjs';
 import { DeliveryItemStatus } from './dto/update-status.dto';
+import { delivery_item_status_enum, meal_type_enum } from '@prisma/client';
 
 @Injectable()
 export class DeliveryAssignmentsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getPartnerDeliveries(partnerId: string, date?: string) {
+  async getPartnerDeliveries(
+    partnerId: string,
+    date?: string,
+    status?: delivery_item_status_enum,
+    mealType?: meal_type_enum,
+  ) {
     const where: any = {
       delivery_partner_id: partnerId,
     };
 
+    // Optional date filter
     if (date) {
-      const deliveryDate = new Date(date);
-      where.delivery_date = deliveryDate;
+      const parsedDate = dayjs(date);
+      if (!parsedDate.isValid()) {
+        throw new BadRequestException('Invalid date format');
+      }
+      where.delivery_date = parsedDate.startOf('day').toDate();
+    }
+
+    // Optional status filter
+    if (status) {
+      if (!Object.values(delivery_item_status_enum).includes(status)) {
+        throw new BadRequestException('Invalid delivery status value');
+      }
+      where.status = status;
+    }
+
+    // Optional meal type filter (nested under assignment)
+    if (mealType) {
+      if (!Object.values(meal_type_enum).includes(mealType)) {
+        throw new BadRequestException('Invalid meal type value');
+      }
+
+      where.assignment = {
+        meal_type: mealType,
+      };
     }
 
     return this.prisma.daily_deliveries.findMany({
@@ -152,5 +181,63 @@ export class DeliveryAssignmentsService {
       todayCompleted,
       breakdown: breakdownObj,
     };
+  }
+
+  async getAssignedOrdersForPartner(partnerId: string) {
+    const assignments = await this.prisma.delivery_assignments.findMany({
+      where: {
+        delivery_partner_id: partnerId,
+      },
+      include: {
+        order: {
+          include: {
+            user: true,
+            preferences: true,
+          },
+        },
+      },
+    });
+
+    const groupedByOrder = new Map();
+
+    for (const assignment of assignments) {
+      const { order } = assignment;
+      const orderId = order.id;
+
+      if (!groupedByOrder.has(orderId)) {
+        const mealTypes = [];
+        const preferencesByWeekDay = new Map();
+
+        for (const pref of order.preferences) {
+          const day = pref.week_day;
+          preferencesByWeekDay.set(day, {
+            breakfast: pref.breakfast,
+            lunch: pref.lunch,
+            dinner: pref.dinner,
+          });
+        }
+
+        // Flatten days and active meal types
+        const allDays = [...preferencesByWeekDay.entries()];
+        const days = allDays.map(([day]) => this.getDayLabel(day));
+        const activeMeals = ['Breakfast', 'Lunch', 'Dinner'].filter((meal, i) =>
+          allDays.some(([, meals]) => meals[meal.toLowerCase()]),
+        );
+
+        groupedByOrder.set(orderId, {
+          userName: order.user.name,
+          meals: activeMeals,
+          type: 'Recurring', // You can modify this based on logic
+          days,
+        });
+      }
+    }
+
+    return Array.from(groupedByOrder.values());
+  }
+
+  private getDayLabel(day: number): string {
+    const map = ['S', 'M', 'T', 'W', 'TH', 'F', 'S'];
+    return map[day % 7];
   }
 }

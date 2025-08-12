@@ -4,7 +4,6 @@ import {
   IsNotEmpty,
   IsOptional,
   MinLength,
-  IsEnum,
 } from 'class-validator';
 
 export class RegisterDto {
@@ -17,15 +16,49 @@ export class RegisterDto {
   email: string;
 
   @IsString()
+  @IsNotEmpty()
+  role: string;
+
+  @IsString()
+  @IsNotEmpty()
+  region_id: string;
+
+  @IsString()
   @IsOptional()
   @MinLength(8)
   password: string;
 
   @IsString()
+  @IsNotEmpty()
+  phone: string;
+
+  @IsString()
   @IsOptional()
-  phone?: string;
+  address?: string;
+
+  @IsString()
+  @IsOptional()
+  message?: string;
+}
+
+export class CustomerRegisterDto {
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @IsEmail()
+  @IsNotEmpty()
+  email: string;
 
   @IsString()
   @IsNotEmpty()
-  role: string;
+  phone: string;
+
+  @IsString()
+  @IsNotEmpty()
+  region_id: string;
+
+  @IsString()
+  @IsOptional()
+  address?: string;
 }

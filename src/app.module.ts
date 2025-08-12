@@ -11,6 +11,12 @@ import { MealTypesModule } from './meal_types/meal_types.module';
 import { APP_GUARD } from '@nestjs/core';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { DeliveryAssignmentsModule } from './delivery-assignments/delivery-assignments.module';
+import { RegionsModule } from './regions/regions.module';
+import { CouponsModule } from './coupons/coupons.module';
+import { AdminModule } from './admin/admin.module';
+import { WeeklyMenuModule } from './weekly-menu/weekly-menu.module';
+import { AnalyticsModule } from './analytics/analytics.module';
+import { PaymentsModule } from './payments/payments.module';
 
 @Module({
   imports: [
@@ -27,6 +33,12 @@ import { DeliveryAssignmentsModule } from './delivery-assignments/delivery-assig
     MealTypesModule,
     DeliveryAssignmentsModule,
     PrismaModule,
+    RegionsModule,
+    CouponsModule,
+    AdminModule,
+    WeeklyMenuModule,
+    AnalyticsModule,
+    PaymentsModule,
   ],
 })
 export class AppModule {}

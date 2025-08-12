@@ -41,10 +41,10 @@ export class FleetManagerController {
   async getRegionOrders(
     @Req() req: Request,
     @Query('deliveryPartnerId') deliveryPartnerId?: string,
-    @Query('date') date?: string, // format: YYYY-MM-DD
+    @Query('date') date?: string,
     @Query('status') status?: string,
-    @Query('page') page = '1',
-    @Query('limit') limit = '10',
+    @Query('page') page = 1,
+    @Query('limit') limit = 30,
   ) {
     const userId = req.user?.['id'] as string;
     if (!userId) throw new UnauthorizedException('Unauthorized');
@@ -54,8 +54,8 @@ export class FleetManagerController {
       deliveryPartnerId,
       date,
       status,
-      parseInt(page),
-      parseInt(limit),
+      Number(page),
+      Number(limit),
     );
 
     req['responseMessage'] = 'Order list fetched successfully';

@@ -1,8 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
-import { PrismaService } from '../prisma/prisma.service';
-import * as dayjs from 'dayjs';
-import { meal_type_enum, order_status_enum } from '@prisma/client';
+import { DateTime } from 'luxon';
+import { PrismaService } from 'src/prisma/prisma.service';
 
 @Injectable()
 export class DeliveryCronService {
@@ -10,42 +9,43 @@ export class DeliveryCronService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  @Cron(CronExpression.EVERY_DAY_AT_11AM)
-  async assignBreakfastDeliveries() {
-    await this.generateDailyDeliveries('breakfast');
-  }
-
-  @Cron(CronExpression.EVERY_DAY_AT_5AM)
-  async assignLunchDeliveries() {
-    await this.generateDailyDeliveries('lunch');
-  }
-
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
-  async assignDinnerDeliveries() {
-    await this.generateDailyDeliveries('dinner');
+  async handleDailyDeliveryGeneration() {
+    const today = DateTime.now().toISODate(); // e.g., "2025-07-29"
+
+    // 1. Mark expired coupons
+    await this.expireOldCoupons(today);
+
+    // 2. Generate daily deliveries (excluding paused orders)
+    await this.generateDailyDeliveries(today);
+
+    this.logger.log(`Daily delivery and coupon expiry cron ran for ${today}`);
   }
 
-  private async generateDailyDeliveries(mealType: meal_type_enum) {
-    const today = dayjs().startOf('day').toDate();
-    const weekday = dayjs().day(); // Sunday = 0
+  private async expireOldCoupons(today: string) {
+    const result = await this.prisma.coupons.updateMany({
+      where: {
+        expires_at: { lt: new Date(today) },
+        status: 'active',
+      },
+      data: {
+        status: 'expired',
+      },
+    });
+    this.logger.log(`Expired ${result.count} old coupons`);
+  }
 
-    this.logger.log(
-      `📦 Generating ${mealType} deliveries for ${today.toDateString()}`,
-    );
-
+  private async generateDailyDeliveries(today: string) {
+    // 1. Fetch valid delivery assignments
     const assignments = await this.prisma.delivery_assignments.findMany({
       where: {
-        meal_type: mealType,
         order: {
-          status: order_status_enum.active,
-          start_date: { lte: today },
-          end_date: { gte: today },
-          preferences: {
-            some: {
-              week_day: weekday,
-              [mealType]: true,
-            },
+          status: 'active',
+          order_pauses: {
+            none: { pause_date: new Date(today) }, // No pause for today
           },
+          start_date: { lte: new Date(today) },
+          end_date: { gte: new Date(today) },
         },
       },
       include: {
@@ -53,42 +53,38 @@ export class DeliveryCronService {
       },
     });
 
-    this.logger.debug(
-      `Found ${assignments.length} valid ${mealType} assignments for today`,
-    );
+    let deliveriesCreated = 0;
 
     for (const assignment of assignments) {
-      const exists = await this.prisma.daily_deliveries.findFirst({
+      const { order_id, delivery_partner_id, meal_type } = assignment;
+
+      // Skip if already generated
+      const existing = await this.prisma.daily_deliveries.findFirst({
         where: {
-          delivery_assignments_id: assignment.id,
-          delivery_date: today,
+          delivery_date: new Date(today),
+          order_id,
+          meal_type,
         },
       });
 
-      if (exists) {
-        this.logger.debug(
-          `🟡 Delivery already generated for assignment ${assignment.id}`,
-        );
-        continue;
-      }
+      if (existing) continue;
 
       await this.prisma.daily_deliveries.create({
         data: {
+          delivery_partner_id,
+          order_id,
           user_id: assignment.order.user_id,
-          delivery_partner_id: assignment.delivery_partner_id,
-          delivery_assignments_id: assignment.id,
-          delivery_date: today,
-          sequence: assignment.sequence,
-          order_id: assignment.order.id,
+          delivery_date: new Date(today),
           status: 'pending',
+          meal_type,
+          delivery_assignments_id: assignment.id,
+          sequence: 0, // You may override later
         },
       });
 
-      this.logger.log(
-        `✅ Created ${mealType} delivery for order ${assignment.order_id} → partner ${assignment.delivery_partner_id}`,
-      );
+      deliveriesCreated++;
     }
 
-    this.logger.log(`🎯 Completed generating ${mealType} deliveries`);
+    this.logger.log(`Created ${deliveriesCreated} deliveries for ${today}`);
   }
 }
