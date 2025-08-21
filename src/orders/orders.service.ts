@@ -46,6 +46,11 @@ export class OrdersService {
       },
       include: {
         user: true,
+        assignments: {
+          include: {
+            delivery_partner: true,
+          },
+        },
         meal_type: true,
         coupon: true,
       },
@@ -103,16 +108,23 @@ export class OrdersService {
   }
 
   async findOne(id: string) {
-    return this.prisma.orders.findUnique({
+    const order = await this.prisma.orders.findUnique({
       where: { id },
       include: {
         user: true,
         meal_type: true,
+        preferences: true,
         coupon: true,
         order_pauses: true,
       },
     });
-  }
+
+    if (!order) {
+      throw new Error(`Order with id ${id} not found`);
+    }
+
+    return order;
+  } 
 
   async findByUser(userId: string) {
     return this.prisma.orders.findMany({

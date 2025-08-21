@@ -17,6 +17,7 @@ import { AdminModule } from './admin/admin.module';
 import { WeeklyMenuModule } from './weekly-menu/weekly-menu.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { PaymentsModule } from './payments/payments.module';
+import { MailModule } from './mail/mail.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { PaymentsModule } from './payments/payments.module';
     WeeklyMenuModule,
     AnalyticsModule,
     PaymentsModule,
+    MailModule,
   ],
 })
 export class AppModule {}

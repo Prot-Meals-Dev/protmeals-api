@@ -10,6 +10,7 @@ import { UsersService } from '../users/users.service';
 import { LoginDto } from './dto/login.dto';
 import { RegisterDto, CustomerRegisterDto } from './dto/register.dto';
 import * as bcrypt from 'bcrypt';
+import { MailService } from 'src/mail/mail.service';
 
 @Injectable()
 export class AuthService {
@@ -17,6 +18,7 @@ export class AuthService {
     private readonly prisma: PrismaService,
     private readonly usersService: UsersService,
     private readonly jwtService: JwtService,
+    private readonly mailService: MailService,
   ) {}
 
   async validateUser(email: string, password: string): Promise<any> {
@@ -165,7 +167,7 @@ export class AuthService {
     const user = await this.prisma.users.findUnique({ where: { email } });
 
     if (!user) {
-      throw new ConflictException('Not a Registerd User');
+      throw new ConflictException('Not a registered user');
     }
 
     if (user.status !== 'active') {
@@ -201,12 +203,14 @@ export class AuthService {
       });
     }
 
-    // In non-production or when bypass enabled, return OTP for testing
-    if (useBypass || process.env.NODE_ENV !== 'production') {
-      return { message: 'OTP generated (test mode)', otp: generatedOtp };
+    // 🔥 Send OTP email (only if not test mode)
+    if (!useBypass && process.env.NODE_ENV === 'production') {
+      await this.mailService.sendOtpEmail(user.email, user.name, generatedOtp);
+      return { message: 'OTP sent to your email' };
     }
 
-    return { message: 'OTP sent to your email' };
+    // In test mode or bypass, return OTP for testing
+    return { message: 'OTP generated (test mode)', otp: generatedOtp };
   }
 
   async validateOtp(email: string, otp: string) {
