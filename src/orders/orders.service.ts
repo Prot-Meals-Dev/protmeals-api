@@ -124,7 +124,7 @@ export class OrdersService {
     }
 
     return order;
-  } 
+  }
 
   async findByUser(userId: string) {
     return this.prisma.orders.findMany({
@@ -432,6 +432,7 @@ export class OrdersService {
       data.start_date,
       data.end_date,
       data.recurring_days,
+      data.coupon_code,
     );
 
     // Generate new order_id
@@ -630,12 +631,17 @@ export class OrdersService {
     startDate: string,
     endDate: string,
     recurringDays: number[],
+    couponCode?: string,
   ): Promise<number> {
     const mealType = await this.prisma.meal_types.findUnique({
       where: { id: mealTypeId },
     });
 
     if (!mealType) throw new BadRequestException('Invalid meal type ID');
+    if (recurringDays.length === 0)
+      throw new BadRequestException(
+        'At least one recurring day must be selected',
+      );
 
     const start = dayjs(startDate).startOf('day');
     const end = dayjs(endDate).startOf('day');
@@ -659,11 +665,40 @@ export class OrdersService {
 
     for (const key of mealKeys) {
       if (mealPreferences[key]) {
-        total += Number(mealType[`${key}_price`]) * Number(totalDeliveryDays);
+        const price = Number(mealType[`${key}_price`] || 0);
+        total += price * totalDeliveryDays;
       }
     }
 
-    return total;
+    // --- Apply coupon if provided ---
+    if (couponCode) {
+      const coupon = await this.prisma.coupons.findUnique({
+        where: { text: couponCode },
+      });
+
+      if (!coupon) throw new BadRequestException('Invalid coupon code');
+
+      if (coupon.status !== 'active') {
+        throw new BadRequestException('Coupon is not active');
+      }
+
+      if (dayjs(coupon.expires_at).isBefore(dayjs())) {
+        throw new BadRequestException('Coupon has expired');
+      }
+
+      if (coupon.discount_price) {
+        total -= Number(coupon.discount_price);
+      }
+
+      // Optionally extend days if you want subscription effect
+      if (coupon.days_added && coupon.days_added > 0) {
+        // This does not directly affect price, but can be returned
+        // or handled separately in schedule generation
+        console.log(`Extend subscription by ${coupon.days_added} days`);
+      }
+    }
+
+    return Math.max(0, Math.round(total * 100) / 100); // prevent negative values
   }
 
   async pauseOrderOnDays(orderId: string, dates: Date[], userId: string) {
