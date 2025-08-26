@@ -15,7 +15,7 @@ import { JwtAuthGuard } from 'src/common/guards/jwt-auth.guard';
 import { Roles } from 'src/common/decorators/roles.decorator';
 import { RolesGuard } from 'src/common/guards/roles.guard';
 import { Request } from 'express';
-import dayjs from 'dayjs';
+import * as dayjs from 'dayjs';
 
 @Controller('coupons')
 @UseGuards(JwtAuthGuard)
