@@ -76,6 +76,10 @@ export class CustomerCreateOrderDto {
   contact_number: string;
 
   @IsString()
+  @IsOptional()
+  coupon_code: string;
+
+  @IsString()
   @IsNotEmpty()
   delivery_address: string;
 
