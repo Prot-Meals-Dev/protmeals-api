@@ -95,6 +95,8 @@ export class FleetManagerService {
     // Base where clause: orders under the same region
     const baseWhere: Prisma.ordersWhereInput = {
       ...(status && { status: status as order_status_enum }),
+      // If no specific status filter is provided, exclude paused orders by default
+      ...(!status && { status: { not: order_status_enum.paused } }),
       ...(startOfDay &&
         endOfDay && {
           start_date: { lte: endOfDay },
@@ -306,6 +308,7 @@ export class FleetManagerService {
         start_date: new Date(dto.start_date),
         end_date: new Date(dto.end_date),
         amount,
+        remarks: dto.remarks, // Add remarks field
         preferences: {
           create: recurringDays.map((day) => ({
             week_day: day,
