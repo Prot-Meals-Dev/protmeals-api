@@ -35,7 +35,7 @@ export class DeliveryCronService {
     this.logger.log(`Expired ${result.count} old coupons`);
   }
 
-  private async generateDailyDeliveries(today: string) {
+  public async generateDailyDeliveries(today: string) {
     // 1. Fetch valid delivery assignments
     const assignments = await this.prisma.delivery_assignments.findMany({
       where: {
@@ -86,5 +86,28 @@ export class DeliveryCronService {
     }
 
     this.logger.log(`Created ${deliveriesCreated} deliveries for ${today}`);
+  }
+}
+
+import { Controller, Post, Body } from '@nestjs/common';
+
+@Controller('deliveries')
+export class DeliveryController {
+  constructor(private readonly deliveryCronService: DeliveryCronService) {}
+
+  @Post('generate')
+  async manualGenerate(@Body('date') date?: string) {
+    // Default to today if no date passed
+    const targetDate = date
+      ? DateTime.fromISO(date).toISODate()
+      : DateTime.now().toISODate();
+
+    const result =
+      await this.deliveryCronService.generateDailyDeliveries(targetDate);
+
+    return {
+      message: `Daily deliveries generated for ${targetDate}`,
+      result,
+    };
   }
 }
