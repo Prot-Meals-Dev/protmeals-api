@@ -708,7 +708,7 @@ export class OrdersService {
     });
     const order = await this.prisma.orders.findUnique({
       where: { id: orderId },
-      include: { user: true },
+      include: { user: true, assignments: true },
     });
 
     if (!order) throw new NotFoundException('Order not found');
@@ -721,25 +721,52 @@ export class OrdersService {
       throw new ForbiddenException('Unauthorized access to this order');
     }
 
-    // Delete daily deliveries for specified dates
-    await this.prisma.daily_deliveries.deleteMany({
-      where: {
-        order_id: orderId,
-        delivery_date: {
-          in: dates,
+    // Use transaction to ensure atomicity and prevent duplication
+    await this.prisma.$transaction(async (tx) => {
+      // First, check if any of these dates are already paused to prevent duplication
+      const existingPauses = await tx.order_pauses.findMany({
+        where: {
+          order_id: orderId,
+          pause_date: {
+            in: dates,
+          },
         },
-      },
-    });
+      });
 
-    // Log pauses (optional)
-    const pauseLogs = dates.map((date) => ({
-      order_id: orderId,
-      pause_date: date,
-    }));
+      const existingPauseDates = new Set(
+        existingPauses.map((p) => p.pause_date.toDateString()),
+      );
 
-    await this.prisma.order_pauses.createMany({
-      data: pauseLogs,
-      skipDuplicates: true,
+      // Filter out dates that are already paused
+      const newPauseDates = dates.filter(
+        (date) => !existingPauseDates.has(date.toDateString()),
+      );
+
+      if (newPauseDates.length === 0) {
+        return; // All dates are already paused
+      }
+
+      // Delete daily deliveries for specified dates
+      await tx.daily_deliveries.deleteMany({
+        where: {
+          order_id: orderId,
+          delivery_date: {
+            in: newPauseDates,
+          },
+        },
+      });
+
+      // Log pauses only for new dates
+      const pauseLogs = newPauseDates.map((date) => ({
+        order_id: orderId,
+        pause_date: date,
+      }));
+
+      if (pauseLogs.length > 0) {
+        await tx.order_pauses.createMany({
+          data: pauseLogs,
+        });
+      }
     });
 
     return {
