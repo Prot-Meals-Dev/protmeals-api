@@ -6,6 +6,7 @@ import {
   IsUUID,
   IsEnum,
   IsDateString,
+  IsOptional,
   isNotEmpty,
 } from 'class-validator';
 import { meal_type_enum } from '@prisma/client';
@@ -55,4 +56,9 @@ export class CreateCustomerOrderDto {
 
   @IsUUID()
   delivery_partner_id: string;
+
+  // Optional remarks field
+  @IsOptional()
+  @IsString()
+  remarks?: string;
 }

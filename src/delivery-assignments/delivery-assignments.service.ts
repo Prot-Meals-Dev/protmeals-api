@@ -131,7 +131,7 @@ export class DeliveryAssignmentsService {
   async getDeliveryPartnerAnalytics(partnerId: string) {
     const today = dayjs().startOf('day').toDate();
 
-    const [totalAssigned, todayDeliveries, todayCompleted, breakdown] =
+    const [totalAssigned, todayDeliveries, todayCompleted, totalCompletedDeliveries, breakdown] =
       await Promise.all([
         this.prisma.delivery_assignments.count({
           where: { delivery_partner_id: partnerId },
@@ -148,6 +148,14 @@ export class DeliveryAssignmentsService {
           where: {
             delivery_partner_id: partnerId,
             delivery_date: today,
+            status: 'delivered',
+          },
+        }),
+
+        // Add total completed deliveries across all dates
+        this.prisma.daily_deliveries.count({
+          where: {
+            delivery_partner_id: partnerId,
             status: 'delivered',
           },
         }),
@@ -179,6 +187,7 @@ export class DeliveryAssignmentsService {
       totalAssigned,
       todayDeliveries,
       todayCompleted,
+      totalCompletedDeliveries, // Add this field
       breakdown: breakdownObj,
     };
   }
