@@ -1,8 +1,11 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import * as dayjs from 'dayjs';
+import * as utc from 'dayjs/plugin/utc';
 import { DeliveryItemStatus } from './dto/update-status.dto';
 import { delivery_item_status_enum, meal_type_enum } from '@prisma/client';
+
+dayjs.extend(utc);
 
 @Injectable()
 export class DeliveryAssignmentsService {
@@ -17,14 +20,15 @@ export class DeliveryAssignmentsService {
     const where: any = {
       delivery_partner_id: partnerId,
     };
-
+    console.log(date);
     // Optional date filter
     if (date) {
-      const parsedDate = dayjs(date);
+      const parsedDate = dayjs.utc(date);
       if (!parsedDate.isValid()) {
         throw new BadRequestException('Invalid date format');
       }
       where.delivery_date = parsedDate.startOf('day').toDate();
+      console.log(where.delivery_date);
     }
 
     // Optional status filter
@@ -131,47 +135,52 @@ export class DeliveryAssignmentsService {
   async getDeliveryPartnerAnalytics(partnerId: string) {
     const today = dayjs().startOf('day').toDate();
 
-    const [totalAssigned, todayDeliveries, todayCompleted, totalCompletedDeliveries, breakdown] =
-      await Promise.all([
-        this.prisma.delivery_assignments.count({
-          where: { delivery_partner_id: partnerId },
-        }),
+    const [
+      totalAssigned,
+      todayDeliveries,
+      todayCompleted,
+      totalCompletedDeliveries,
+      breakdown,
+    ] = await Promise.all([
+      this.prisma.delivery_assignments.count({
+        where: { delivery_partner_id: partnerId },
+      }),
 
-        this.prisma.daily_deliveries.count({
-          where: {
-            delivery_partner_id: partnerId,
-            delivery_date: today,
-          },
-        }),
+      this.prisma.daily_deliveries.count({
+        where: {
+          delivery_partner_id: partnerId,
+          delivery_date: today,
+        },
+      }),
 
-        this.prisma.daily_deliveries.count({
-          where: {
-            delivery_partner_id: partnerId,
-            delivery_date: today,
-            status: 'delivered',
-          },
-        }),
+      this.prisma.daily_deliveries.count({
+        where: {
+          delivery_partner_id: partnerId,
+          delivery_date: today,
+          status: 'delivered',
+        },
+      }),
 
-        // Add total completed deliveries across all dates
-        this.prisma.daily_deliveries.count({
-          where: {
-            delivery_partner_id: partnerId,
-            status: 'delivered',
-          },
-        }),
+      // Add total completed deliveries across all dates
+      this.prisma.daily_deliveries.count({
+        where: {
+          delivery_partner_id: partnerId,
+          status: 'delivered',
+        },
+      }),
 
-        this.prisma.delivery_assignments.groupBy({
-          by: ['meal_type'],
-          where: {
-            delivery_partner_id: partnerId,
-            order: {
-              start_date: { lte: today },
-              end_date: { gte: today },
-            },
+      this.prisma.delivery_assignments.groupBy({
+        by: ['meal_type'],
+        where: {
+          delivery_partner_id: partnerId,
+          order: {
+            start_date: { lte: today },
+            end_date: { gte: today },
           },
-          _count: true,
-        }),
-      ]);
+        },
+        _count: true,
+      }),
+    ]);
 
     const breakdownObj = {
       breakfast: 0,

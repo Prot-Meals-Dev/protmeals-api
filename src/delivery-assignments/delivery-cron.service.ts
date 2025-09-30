@@ -35,7 +35,7 @@ export class DeliveryCronService {
     this.logger.log(`Expired ${result.count} old coupons`);
   }
 
-  public async generateDailyDeliveries(today: string) {
+  async generateDailyDeliveries(today: string) {
     // 1. Fetch valid delivery assignments
     const assignments = await this.prisma.delivery_assignments.findMany({
       where: {
