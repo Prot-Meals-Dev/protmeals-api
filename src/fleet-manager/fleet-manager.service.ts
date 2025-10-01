@@ -112,8 +112,6 @@ export class FleetManagerService {
       },
     };
 
-    console.log(baseWhere);
-
     const total = await this.prisma.orders.count({
       where: baseWhere,
     });
@@ -183,6 +181,7 @@ export class FleetManagerService {
         amount: Number(order.amount),
         total_assignments: order.assignments.length,
         delivery_assignments: formattedAssignments,
+        remarks: order.remarks,
       };
     });
 

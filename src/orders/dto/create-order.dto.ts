@@ -112,4 +112,8 @@ export class CustomerCreateOrderDto {
   @IsOptional()
   @IsString()
   payment_type?: 'one_time' | 'subscription';
+
+  @IsOptional()
+  @IsString()
+  remarks?: string;
 }
