@@ -100,6 +100,7 @@ export class OrdersService {
         start_date: order.start_date,
         isDeliveringToday: checkIfDeliveringToday(order),
         status: order.status,
+        remarks: order.remarks,
       })),
       total,
       page,
@@ -226,6 +227,7 @@ export class OrdersService {
           meal_type: assignment.meal_type,
           partner: assignment.delivery_partner,
         })),
+        remarks: order.remarks,
         created_at: order.created_at,
       })),
       pagination: {
@@ -470,6 +472,7 @@ export class OrdersService {
         amount,
         status: order_status_enum.pending,
         payment_status: payment_status_enum.pending,
+        remarks: data.remarks,
         preferences: {
           create: data.recurring_days.map((day) => ({
             week_day: day,
