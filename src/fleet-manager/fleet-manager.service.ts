@@ -453,6 +453,13 @@ export class FleetManagerService {
       });
     }
 
+    if (dto.remarks) {
+      await this.prisma.orders.update({
+        where: { id: orderId },
+        data: { remarks: dto.remarks },
+      });
+    }
+
     // Update user's phone and address
     if (dto.phone || dto.address) {
       await this.prisma.users.update({
