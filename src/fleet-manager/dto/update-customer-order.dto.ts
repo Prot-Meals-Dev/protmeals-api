@@ -16,4 +16,8 @@ export class UpdateCustomerOrderDto {
   @IsOptional()
   @IsString()
   delivery_partner_id?: string;
+
+  @IsOptional()
+  @IsString()
+  remarks?: string;
 }
