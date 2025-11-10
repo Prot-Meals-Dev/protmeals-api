@@ -356,7 +356,7 @@ export class UsersService {
   async remove(id: string) {
     await this.findOne(id); // ensure user exists
 
-    await this.prisma.users.delete({ where: { id } }); // fixed: user → users
+    await this.prisma.users.delete({ where: { id } }); 
 
     return { message: `User with ID ${id} deleted successfully` };
   }
