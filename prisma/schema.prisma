@@ -16,18 +16,18 @@ model roles {
 }
 
 model users {
-  id               String                 @id @default(uuid())
-  name             String
-  email            String                 @unique
-  phone            String?
-  address          String?
-  status           user_status_enum       @default(active)
-  role_id          String
-  profile_picture  String?
-  region_id        String?
-  password         String?
-  created_at       DateTime               @default(now()) @db.Timestamp(3)
-  updated_at       DateTime               @default(now()) @updatedAt @db.Timestamp(3)
+  id              String           @id @default(uuid())
+  name            String
+  email           String           @unique
+  phone           String?
+  address         String?
+  status          user_status_enum @default(active)
+  role_id         String
+  profile_picture String?
+  region_id       String?
+  password        String?
+  created_at      DateTime         @default(now()) @db.Timestamp(3)
+  updated_at      DateTime         @default(now()) @updatedAt @db.Timestamp(3)
 
   created_coupons  coupons[]              @relation("CreatedBy")
   deliveryPartner  daily_deliveries[]     @relation("PartnerDeliveries")
@@ -38,8 +38,8 @@ model users {
   transactions     transactions[]
   otps             user_otps[]
 
-  region           regions?               @relation(fields: [region_id], references: [id], onDelete: Cascade)
-  role             roles                  @relation(fields: [role_id], references: [id], onDelete: Cascade)
+  region regions? @relation(fields: [region_id], references: [id], onDelete: Cascade)
+  role   roles    @relation(fields: [role_id], references: [id], onDelete: Cascade)
 
   @@index([region_id], map: "users_region_id_fkey")
   @@index([role_id], map: "users_role_id_fkey")
@@ -78,21 +78,22 @@ model meal_types {
 }
 
 model orders {
-  id               String                   @id @default(uuid())
+  id               String              @id @default(uuid())
   user_id          String
-  order_id         String?                  @unique @db.VarChar(20)
+  order_id         String?             @unique @db.VarChar(20)
   meal_type_id     String?
   delevery_address String?
-  latitude         Decimal?                 @db.Decimal(10, 6)
-  longitude        Decimal?                 @db.Decimal(10, 6)
-  status           order_status_enum        @default(active)
-  payment_status   payment_status_enum      @default(pending)
+  location_url     String?
+  latitude         Decimal?            @db.Decimal(10, 6)
+  longitude        Decimal?            @db.Decimal(10, 6)
+  status           order_status_enum   @default(active)
+  payment_status   payment_status_enum @default(pending)
   amount           Decimal
   start_date       DateTime
   end_date         DateTime
   coupon_id        String?
   remarks          String?
-  created_at       DateTime                 @default(now()) @db.Timestamp(3)
+  created_at       DateTime            @default(now()) @db.Timestamp(3)
 
   daily_deliveries daily_deliveries[]
   assignments      delivery_assignments[]
@@ -134,10 +135,10 @@ model daily_deliveries {
   order_id                String
   meal_type               meal_type_enum
 
-  assignment              delivery_assignments?     @relation(fields: [delivery_assignments_id], references: [id], onDelete: Cascade)
-  partner                 users                     @relation("PartnerDeliveries", fields: [delivery_partner_id], references: [id], onDelete: Cascade)
-  order                   orders                    @relation(fields: [order_id], references: [id], onDelete: Cascade)
-  user                    users                     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  assignment delivery_assignments? @relation(fields: [delivery_assignments_id], references: [id], onDelete: Cascade)
+  partner    users                 @relation("PartnerDeliveries", fields: [delivery_partner_id], references: [id], onDelete: Cascade)
+  order      orders                @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  user       users                 @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([delivery_assignments_id], map: "daily_deliveries_delivery_assignments_id_fkey")
   @@index([delivery_partner_id], map: "daily_deliveries_delivery_partner_id_fkey")
@@ -147,20 +148,20 @@ model daily_deliveries {
 }
 
 model delivery_assignments {
-  id                  String             @id @default(uuid())
+  id                  String         @id @default(uuid())
   order_id            String
   meal_id             String
   delivery_partner_id String
   meal_type           meal_type_enum
   sequence            Int
   assigned_by         String?
-  assigned_at         DateTime           @default(now()) @db.Timestamp(3)
+  assigned_at         DateTime       @default(now()) @db.Timestamp(3)
 
-  daily_delivery      daily_deliveries[]
-  assigned_by_user    users?             @relation("AssignedByUser", fields: [assigned_by], references: [id], onDelete: Cascade)
-  delivery_partner    users              @relation("PartnerAssignments", fields: [delivery_partner_id], references: [id], onDelete: Cascade)
-  meal                meal_types         @relation(fields: [meal_id], references: [id], onDelete: Cascade)
-  order               orders             @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  daily_delivery   daily_deliveries[]
+  assigned_by_user users?             @relation("AssignedByUser", fields: [assigned_by], references: [id], onDelete: Cascade)
+  delivery_partner users              @relation("PartnerAssignments", fields: [delivery_partner_id], references: [id], onDelete: Cascade)
+  meal             meal_types         @relation(fields: [meal_id], references: [id], onDelete: Cascade)
+  order            orders             @relation(fields: [order_id], references: [id], onDelete: Cascade)
 
   @@index([assigned_by], map: "delivery_assignments_assigned_by_fkey")
   @@index([delivery_partner_id], map: "delivery_assignments_delivery_partner_id_fkey")
@@ -187,8 +188,8 @@ model transactions {
   error_description   String?
   created_at          DateTime                @default(now()) @db.Timestamp(3)
 
-  order               orders?                 @relation(fields: [order_id], references: [id], onDelete: Cascade)
-  user                users                   @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  order orders? @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  user  users   @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([order_id], map: "transactions_order_id_fkey")
   @@index([user_id], map: "transactions_user_id_fkey")
@@ -202,7 +203,7 @@ model user_otps {
   created_at DateTime @default(now()) @db.Timestamp(3)
   expires_at DateTime
 
-  user       users    @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  user users @relation(fields: [user_id], references: [id], onDelete: Cascade)
 
   @@index([user_id], map: "user_otps_user_id_fkey")
   @@map("user_otps")
@@ -218,8 +219,8 @@ model coupons {
   expires_at     DateTime
   status         coupon_status_enum @default(active)
 
-  creator        users              @relation("CreatedBy", fields: [created_by], references: [id], onDelete: Cascade)
-  orders         orders[]
+  creator users    @relation("CreatedBy", fields: [created_by], references: [id], onDelete: Cascade)
+  orders  orders[]
 
   @@index([created_by], map: "coupons_created_by_fkey")
   @@map("coupons")
@@ -231,7 +232,7 @@ model order_pauses {
   pause_date DateTime @db.Date
   created_at DateTime @default(now()) @db.Timestamp(3)
 
-  order      orders   @relation(fields: [order_id], references: [id], onDelete: Cascade)
+  order orders @relation(fields: [order_id], references: [id], onDelete: Cascade)
 
   @@unique([order_id, pause_date])
   @@map("order_pauses")
