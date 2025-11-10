@@ -20,7 +20,6 @@ export class DeliveryAssignmentsService {
     const where: any = {
       delivery_partner_id: partnerId,
     };
-    console.log(date);
     // Optional date filter
     if (date) {
       const parsedDate = dayjs.utc(date);
@@ -122,6 +121,7 @@ export class DeliveryAssignmentsService {
             order_id: true,
             delevery_address: true,
             start_date: true,
+            location_url: true,
             end_date: true,
             amount: true,
             status: true,
