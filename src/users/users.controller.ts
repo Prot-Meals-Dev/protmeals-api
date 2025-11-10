@@ -43,7 +43,7 @@ export class UsersController {
     @Query('region_id') region_id?: string,
     @Query('search') search?: string,
   ) {
-    const users = await this.usersService.findAllWithFilters({  
+    const users = await this.usersService.findAllWithFilters({
       role,
       status,
       region_id,
@@ -122,7 +122,7 @@ export class UsersController {
 
   @Patch(':id')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('admin', 'fleet-manager')
   async update(
     @Request() req,
     @Param('id') id: string,
@@ -167,7 +167,7 @@ export class UsersController {
 
   @Delete(':id')
   @UseGuards(RolesGuard)
-  @Roles('admin')
+  @Roles('admin', 'fleet-manager')
   async remove(@Request() req, @Param('id') id: string) {
     const result = await this.usersService.remove(id);
     req.responseMessage = 'User deleted successfully';

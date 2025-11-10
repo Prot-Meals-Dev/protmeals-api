@@ -134,6 +134,7 @@ export class DeliveryAssignmentsService {
 
   async getDeliveryPartnerAnalytics(partnerId: string) {
     const today = dayjs().startOf('day').toDate();
+    const tomorrow = dayjs().endOf('day').toDate();
 
     const [
       totalAssigned,
@@ -141,27 +142,37 @@ export class DeliveryAssignmentsService {
       todayCompleted,
       totalCompletedDeliveries,
       breakdown,
+      todayCompletedBreakdown,
     ] = await Promise.all([
+      // 1️⃣ Total assignments for this partner
       this.prisma.delivery_assignments.count({
         where: { delivery_partner_id: partnerId },
       }),
 
+      // 2️⃣ Total deliveries assigned today
       this.prisma.daily_deliveries.count({
         where: {
           delivery_partner_id: partnerId,
-          delivery_date: today,
+          delivery_date: {
+            gte: today,
+            lte: tomorrow,
+          },
         },
       }),
 
+      // 3️⃣ Total deliveries completed today
       this.prisma.daily_deliveries.count({
         where: {
           delivery_partner_id: partnerId,
-          delivery_date: today,
+          delivery_date: {
+            gte: today,
+            lte: tomorrow,
+          },
           status: 'delivered',
         },
       }),
 
-      // Add total completed deliveries across all dates
+      // 4️⃣ Total completed deliveries overall
       this.prisma.daily_deliveries.count({
         where: {
           delivery_partner_id: partnerId,
@@ -169,6 +180,7 @@ export class DeliveryAssignmentsService {
         },
       }),
 
+      // 5️⃣ Meal type breakdown (all assignments)
       this.prisma.delivery_assignments.groupBy({
         by: ['meal_type'],
         where: {
@@ -180,8 +192,23 @@ export class DeliveryAssignmentsService {
         },
         _count: true,
       }),
+
+      // 6️⃣ Today's completed deliveries breakdown (breakfast/lunch/dinner)
+      this.prisma.daily_deliveries.groupBy({
+        by: ['meal_type'],
+        where: {
+          delivery_partner_id: partnerId,
+          delivery_date: {
+            gte: today,
+            lte: tomorrow,
+          },
+          status: 'delivered',
+        },
+        _count: true,
+      }),
     ]);
 
+    // Build normal breakdown (assigned)
     const breakdownObj = {
       breakfast: 0,
       lunch: 0,
@@ -192,12 +219,24 @@ export class DeliveryAssignmentsService {
       breakdownObj[b.meal_type] = b._count;
     });
 
+    // Build today's completed breakdown
+    const todayCompletedBreakdownObj = {
+      breakfast: 0,
+      lunch: 0,
+      dinner: 0,
+    };
+
+    todayCompletedBreakdown.forEach((b) => {
+      todayCompletedBreakdownObj[b.meal_type] = b._count;
+    });
+
     return {
       totalAssigned,
       todayDeliveries,
       todayCompleted,
-      totalCompletedDeliveries, // Add this field
+      totalCompletedDeliveries,
       breakdown: breakdownObj,
+      todayCompletedBreakdown: todayCompletedBreakdownObj, // 👈 new field
     };
   }
 

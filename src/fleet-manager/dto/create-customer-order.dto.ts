@@ -61,4 +61,8 @@ export class CreateCustomerOrderDto {
   @IsOptional()
   @IsString()
   remarks?: string;
+
+  @IsOptional()
+  @IsString()
+  location_url?: string;
 }

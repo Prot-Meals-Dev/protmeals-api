@@ -165,6 +165,7 @@ export class FleetManagerService {
         name: order.user.name,
         address: order.user.address,
         delivery_address: order.delevery_address,
+        location_url:order.location_url,
         phone: order.user.phone,
         email: order.user.email,
         meal_type_id: order.meal_type_id,
@@ -306,6 +307,7 @@ export class FleetManagerService {
         meal_type_id: dto.meal_type_id,
         start_date: new Date(dto.start_date),
         end_date: new Date(dto.end_date),
+        location_url: dto.location_url,
         amount,
         remarks: dto.remarks, // Add remarks field
         preferences: {
