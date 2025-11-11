@@ -133,46 +133,54 @@ export class DeliveryAssignmentsService {
   }
 
   async getDeliveryPartnerAnalytics(partnerId: string) {
-    const today = dayjs().startOf('day').toDate();
-    const tomorrow = dayjs().endOf('day').toDate();
+    const startOfDay = dayjs().startOf('day').toDate();
+    const endOfDay = dayjs().endOf('day').toDate();
 
     const [
+      // 1️⃣ Total deliveries assigned today (not lifetime assignments)
       totalAssigned,
+      // 2️⃣ Total deliveries assigned today (kept for backward-compat, same as totalAssigned)
       todayDeliveries,
+      // 3️⃣ Total deliveries completed today
       todayCompleted,
+      // 4️⃣ Total completed deliveries overall
       totalCompletedDeliveries,
+      // 5️⃣ Meal type breakdown for today's assigned deliveries
       breakdown,
+      // 6️⃣ Today's completed deliveries breakdown (breakfast/lunch/dinner)
       todayCompletedBreakdown,
     ] = await Promise.all([
-      // 1️⃣ Total assignments for this partner
-      this.prisma.delivery_assignments.count({
-        where: { delivery_partner_id: partnerId },
-      }),
-
-      // 2️⃣ Total deliveries assigned today
       this.prisma.daily_deliveries.count({
         where: {
           delivery_partner_id: partnerId,
           delivery_date: {
-            gte: today,
-            lte: tomorrow,
+            gte: startOfDay,
+            lte: endOfDay,
           },
         },
       }),
 
-      // 3️⃣ Total deliveries completed today
       this.prisma.daily_deliveries.count({
         where: {
           delivery_partner_id: partnerId,
           delivery_date: {
-            gte: today,
-            lte: tomorrow,
+            gte: startOfDay,
+            lte: endOfDay,
+          },
+        },
+      }),
+
+      this.prisma.daily_deliveries.count({
+        where: {
+          delivery_partner_id: partnerId,
+          delivery_date: {
+            gte: startOfDay,
+            lte: endOfDay,
           },
           status: 'delivered',
         },
       }),
 
-      // 4️⃣ Total completed deliveries overall
       this.prisma.daily_deliveries.count({
         where: {
           delivery_partner_id: partnerId,
@@ -180,27 +188,25 @@ export class DeliveryAssignmentsService {
         },
       }),
 
-      // 5️⃣ Meal type breakdown (all assignments)
-      this.prisma.delivery_assignments.groupBy({
-        by: ['meal_type'],
-        where: {
-          delivery_partner_id: partnerId,
-          order: {
-            start_date: { lte: today },
-            end_date: { gte: today },
-          },
-        },
-        _count: true,
-      }),
-
-      // 6️⃣ Today's completed deliveries breakdown (breakfast/lunch/dinner)
       this.prisma.daily_deliveries.groupBy({
         by: ['meal_type'],
         where: {
           delivery_partner_id: partnerId,
           delivery_date: {
-            gte: today,
-            lte: tomorrow,
+            gte: startOfDay,
+            lte: endOfDay,
+          },
+        },
+        _count: true,
+      }),
+
+      this.prisma.daily_deliveries.groupBy({
+        by: ['meal_type'],
+        where: {
+          delivery_partner_id: partnerId,
+          delivery_date: {
+            gte: startOfDay,
+            lte: endOfDay,
           },
           status: 'delivered',
         },
@@ -208,7 +214,7 @@ export class DeliveryAssignmentsService {
       }),
     ]);
 
-    // Build normal breakdown (assigned)
+    // Build normal breakdown (assigned for today)
     const breakdownObj = {
       breakfast: 0,
       lunch: 0,
