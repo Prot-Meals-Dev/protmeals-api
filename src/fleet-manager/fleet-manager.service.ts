@@ -165,7 +165,7 @@ export class FleetManagerService {
         name: order.user.name,
         address: order.user.address,
         delivery_address: order.delevery_address,
-        location_url:order.location_url,
+        location_url: order.location_url,
         phone: order.user.phone,
         email: order.user.email,
         meal_type_id: order.meal_type_id,
@@ -564,9 +564,14 @@ export class FleetManagerService {
         }
 
         // 2) Rebuild meal preferences if recurring days or preferences changed
-        if (dto.recurring_days !== undefined || dto.meal_preferences !== undefined) {
+        if (
+          dto.recurring_days !== undefined ||
+          dto.meal_preferences !== undefined
+        ) {
           // Delete existing preferences
-          await tx.order_meal_preferences.deleteMany({ where: { order_id: orderId } });
+          await tx.order_meal_preferences.deleteMany({
+            where: { order_id: orderId },
+          });
           // Create new ones
           await tx.order_meal_preferences.createMany({
             data: newRecurringDays.map((day) => ({
@@ -580,19 +585,26 @@ export class FleetManagerService {
         }
 
         // 3) Sync delivery assignments to meal_preferences (add/remove meals)
-        const existingMeals = new Set(order.assignments.map((a) => a.meal_type));
+        const existingMeals = new Set(
+          order.assignments.map((a) => a.meal_type),
+        );
         const desiredMeals = new Set(
           (['breakfast', 'lunch', 'dinner'] as const).filter(
             (m) => newMealPrefs[m],
           ),
         );
 
-        const toAdd = Array.from(desiredMeals).filter((m) => !existingMeals.has(m));
-        const toRemove = Array.from(existingMeals).filter((m) => !desiredMeals.has(m));
+        const toAdd = Array.from(desiredMeals).filter(
+          (m) => !existingMeals.has(m),
+        );
+        const toRemove = Array.from(existingMeals).filter(
+          (m) => !desiredMeals.has(m),
+        );
 
         if (toAdd.length || toRemove.length) {
           const partnerIdForAssignments =
-            dto.delivery_partner_id || order.assignments[0]?.delivery_partner_id;
+            dto.delivery_partner_id ||
+            order.assignments[0]?.delivery_partner_id;
 
           if (toAdd.length && !partnerIdForAssignments) {
             throw new BadRequestException(
@@ -639,6 +651,13 @@ export class FleetManagerService {
       await prisma.orders.update({
         where: { id: orderId },
         data: { delevery_address: dto.delivery_address },
+      });
+    }
+
+    if (dto.location_url) {
+      await prisma.orders.update({
+        where: { id: orderId },
+        data: { location_url: dto.location_url },
       });
     }
 
@@ -842,7 +861,10 @@ export class FleetManagerService {
       select: { region_id: true },
     });
 
-    if (!fleetManager?.region_id || order.user.region_id !== fleetManager.region_id) {
+    if (
+      !fleetManager?.region_id ||
+      order.user.region_id !== fleetManager.region_id
+    ) {
       throw new BadRequestException(
         'You do not have permission to delete this order',
       );
