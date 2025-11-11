@@ -437,45 +437,48 @@ export class FleetManagerService {
   }
 
   async updateCustomerOrder(orderId: string, dto: UpdateCustomerOrderDto) {
-    const order = await this.prisma.orders.findUnique({
+    const prisma = this.prisma;
+    const order = await prisma.orders.findUnique({
       where: { id: orderId },
       include: {
         user: true,
+        meal_type: true,
+        preferences: true,
         assignments: true,
+        transactions: true,
+        daily_deliveries: {
+          where: {
+            delivery_date: { gte: dayjs().startOf('day').toDate() },
+          },
+        },
       },
     });
 
     if (!order) throw new NotFoundException('Order not found');
 
-    // Update delivery address in order
-    if (dto.delivery_address) {
-      await this.prisma.orders.update({
-        where: { id: orderId },
-        data: { delevery_address: dto.delivery_address },
-      });
+    // ✅ Validation 1: Cannot modify completed or cancelled orders
+    if (['completed', 'cancelled'].includes(order.status)) {
+      throw new BadRequestException(
+        `Cannot modify order with status "${order.status}". Only active, pending, or paused orders can be edited.`,
+      );
     }
 
-    if (dto.remarks) {
-      await this.prisma.orders.update({
-        where: { id: orderId },
-        data: { remarks: dto.remarks },
-      });
+    // ✅ Validation 2: Check for active/successful transactions that lock the order
+    const activeTransactions = order.transactions.filter(
+      (txn) => txn.status === 'success',
+    );
+
+    if (activeTransactions.length > 0 && dto.delivery_partner_id) {
+      // Only restrict critical changes for paid orders
+      // Allow address/phone/remarks updates, but warn about delivery partner changes
+      console.warn(
+        `Warning: Changing delivery partner for order ${orderId} with paid transactions`,
+      );
     }
 
-    // Update user's phone and address
-    if (dto.phone || dto.address) {
-      await this.prisma.users.update({
-        where: { id: order.user_id },
-        data: {
-          ...(dto.phone && { phone: dto.phone }),
-          ...(dto.address && { address: dto.address }),
-        },
-      });
-    }
-
-    // Update delivery partner
+    // ✅ Validation 3: If changing delivery partner, verify they're in the same region
     if (dto.delivery_partner_id) {
-      const partner = await this.prisma.users.findFirst({
+      const partner = await prisma.users.findFirst({
         where: {
           id: dto.delivery_partner_id,
           role: { name: 'delivery_partner' },
@@ -484,14 +487,212 @@ export class FleetManagerService {
 
       if (!partner) throw new NotFoundException('Delivery partner not found');
 
-      await this.prisma.delivery_assignments.updateMany({
-        where: { order_id: orderId },
-        data: { delivery_partner_id: dto.delivery_partner_id },
+      // Check if partner is in the same region as the customer
+      if (partner.region_id !== order.user.region_id) {
+        throw new BadRequestException(
+          'Delivery partner must be in the same region as the customer',
+        );
+      }
+
+      // Update delivery assignments AND daily deliveries
+      await prisma.$transaction(async (tx) => {
+        // Update delivery assignments
+        await tx.delivery_assignments.updateMany({
+          where: { order_id: orderId },
+          data: { delivery_partner_id: dto.delivery_partner_id },
+        });
+
+        // Update future daily deliveries to reflect new partner
+        await tx.daily_deliveries.updateMany({
+          where: {
+            order_id: orderId,
+            delivery_date: { gte: dayjs().startOf('day').toDate() },
+          },
+          data: { delivery_partner_id: dto.delivery_partner_id },
+        });
       });
+    }
+
+    // Prepare flags to determine if amount needs recalculation
+    const willChangeSchedule =
+      dto.end_date !== undefined ||
+      dto.recurring_days !== undefined ||
+      dto.meal_preferences !== undefined;
+
+    // Normalize day map
+    const DAY_MAP: Record<string, number> = {
+      sun: 0,
+      mon: 1,
+      tue: 2,
+      wed: 3,
+      thu: 4,
+      fri: 5,
+      sat: 6,
+    };
+
+    // Compute new values to persist
+    const newEndDate = dto.end_date ? new Date(dto.end_date) : order.end_date;
+    const currentRecurringDays = order.preferences.map((p) => p.week_day);
+    const newRecurringDays = dto.recurring_days
+      ? dto.recurring_days.map((d) => DAY_MAP[d.toLowerCase()])
+      : currentRecurringDays;
+    const samplePref = order.preferences[0] ?? {
+      breakfast: false,
+      lunch: false,
+      dinner: false,
+    };
+    const newMealPrefs = dto.meal_preferences ?? {
+      breakfast: !!samplePref.breakfast,
+      lunch: !!samplePref.lunch,
+      dinner: !!samplePref.dinner,
+    };
+
+    // Transactional updates for schedule-related changes (end_date, recurring_days, meal_preferences)
+    if (willChangeSchedule) {
+      // Basic validation
+      if (dayjs(newEndDate).isBefore(dayjs(order.start_date), 'day')) {
+        throw new BadRequestException('End date must be after start date');
+      }
+
+      await prisma.$transaction(async (tx) => {
+        // 1) Update order end_date
+        if (dto.end_date) {
+          await tx.orders.update({
+            where: { id: orderId },
+            data: { end_date: newEndDate },
+          });
+        }
+
+        // 2) Rebuild meal preferences if recurring days or preferences changed
+        if (dto.recurring_days !== undefined || dto.meal_preferences !== undefined) {
+          // Delete existing preferences
+          await tx.order_meal_preferences.deleteMany({ where: { order_id: orderId } });
+          // Create new ones
+          await tx.order_meal_preferences.createMany({
+            data: newRecurringDays.map((day) => ({
+              order_id: orderId,
+              week_day: day,
+              breakfast: newMealPrefs.breakfast,
+              lunch: newMealPrefs.lunch,
+              dinner: newMealPrefs.dinner,
+            })),
+          });
+        }
+
+        // 3) Sync delivery assignments to meal_preferences (add/remove meals)
+        const existingMeals = new Set(order.assignments.map((a) => a.meal_type));
+        const desiredMeals = new Set(
+          (['breakfast', 'lunch', 'dinner'] as const).filter(
+            (m) => newMealPrefs[m],
+          ),
+        );
+
+        const toAdd = Array.from(desiredMeals).filter((m) => !existingMeals.has(m));
+        const toRemove = Array.from(existingMeals).filter((m) => !desiredMeals.has(m));
+
+        if (toAdd.length || toRemove.length) {
+          const partnerIdForAssignments =
+            dto.delivery_partner_id || order.assignments[0]?.delivery_partner_id;
+
+          if (toAdd.length && !partnerIdForAssignments) {
+            throw new BadRequestException(
+              'Delivery partner is required to add new meal assignments',
+            );
+          }
+
+          // Remove obsolete assignments and their future daily deliveries
+          await tx.daily_deliveries.deleteMany({
+            where: {
+              order_id: orderId,
+              delivery_date: { gte: dayjs().startOf('day').toDate() },
+              meal_type: { in: toRemove as any },
+            },
+          });
+          await tx.delivery_assignments.deleteMany({
+            where: { order_id: orderId, meal_type: { in: toRemove as any } },
+          });
+
+          // Add new assignments
+          if (toAdd.length) {
+            const maxSeq = await tx.delivery_assignments.aggregate({
+              where: { delivery_partner_id: partnerIdForAssignments },
+              _max: { sequence: true },
+            });
+            let startSeq = (maxSeq._max.sequence ?? 0) + 1;
+            await tx.delivery_assignments.createMany({
+              data: toAdd.map((meal) => ({
+                order_id: orderId,
+                meal_id: order.meal_type_id!,
+                delivery_partner_id: partnerIdForAssignments!,
+                meal_type: meal as any,
+                sequence: startSeq++,
+                assigned_by: null,
+              })),
+            });
+          }
+        }
+      });
+    }
+
+    // Update delivery address in order
+    if (dto.delivery_address) {
+      await prisma.orders.update({
+        where: { id: orderId },
+        data: { delevery_address: dto.delivery_address },
+      });
+    }
+
+    // Update remarks (safe to update anytime)
+    if (dto.remarks) {
+      await prisma.orders.update({
+        where: { id: orderId },
+        data: { remarks: dto.remarks },
+      });
+    }
+
+    // Update user's phone and address
+    if (dto.phone || dto.address) {
+      await prisma.users.update({
+        where: { id: order.user_id },
+        data: {
+          ...(dto.phone && { phone: dto.phone }),
+          ...(dto.address && { address: dto.address }),
+        },
+      });
+    }
+
+    // Recalculate or update amount
+    if (dto.amount !== undefined || willChangeSchedule) {
+      if (dto.amount !== undefined) {
+        // If there are paid transactions, prevent arbitrary amount change
+        if (activeTransactions.length > 0) {
+          throw new BadRequestException(
+            'Cannot update amount for orders with successful transactions',
+          );
+        }
+        await prisma.orders.update({
+          where: { id: orderId },
+          data: { amount: dto.amount },
+        });
+      } else {
+        // Recalculate based on new or existing values
+        const recalcAmount = await this.ordersService.calculateAmount(
+          order.meal_type_id!,
+          newMealPrefs,
+          dayjs(order.start_date).format('YYYY-MM-DD'),
+          dayjs(newEndDate).format('YYYY-MM-DD'),
+          newRecurringDays,
+        );
+        await prisma.orders.update({
+          where: { id: orderId },
+          data: { amount: recalcAmount },
+        });
+      }
     }
 
     return {
       orderId,
+      message: 'Order updated successfully',
     };
   }
 
@@ -613,5 +814,97 @@ export class FleetManagerService {
       meal_type: a.meal_type,
       order: a.order,
     }));
+  }
+
+  async deleteOrder(orderId: string, fleetManagerId: string) {
+    // Check if order exists and get related data
+    const order = await this.prisma.orders.findUnique({
+      where: { id: orderId },
+      include: {
+        user: true,
+        assignments: true,
+        transactions: true,
+        daily_deliveries: {
+          where: {
+            delivery_date: { gte: new Date() },
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    // Verify fleet manager has access to this order (region check)
+    const fleetManager = await this.prisma.users.findUnique({
+      where: { id: fleetManagerId },
+      select: { region_id: true },
+    });
+
+    if (!fleetManager?.region_id || order.user.region_id !== fleetManager.region_id) {
+      throw new BadRequestException(
+        'You do not have permission to delete this order',
+      );
+    }
+
+    // Check for paid transactions - cannot delete orders with paid transactions
+    const paidTransactions = order.transactions.filter(
+      (txn) => txn.status === 'success',
+    );
+
+    if (paidTransactions.length > 0) {
+      throw new BadRequestException(
+        'Cannot delete order with paid transactions. Please refund first or cancel the order instead.',
+      );
+    }
+
+    // Only allow deletion of pending or cancelled orders
+    if (!['pending', 'cancelled'].includes(order.status)) {
+      throw new BadRequestException(
+        `Cannot delete order with status "${order.status}". Only pending or cancelled orders can be deleted.`,
+      );
+    }
+
+    // Perform cascading deletion in a transaction
+    await this.prisma.$transaction(async (tx) => {
+      // Delete daily_deliveries
+      await tx.daily_deliveries.deleteMany({
+        where: { order_id: orderId },
+      });
+
+      // Delete delivery_assignments
+      await tx.delivery_assignments.deleteMany({
+        where: { order_id: orderId },
+      });
+
+      // Delete order_pauses
+      await tx.order_pauses.deleteMany({
+        where: { order_id: orderId },
+      });
+
+      // Delete order_meal_preferences
+      await tx.order_meal_preferences.deleteMany({
+        where: { order_id: orderId },
+      });
+
+      // Delete pending transactions
+      await tx.transactions.deleteMany({
+        where: {
+          order_id: orderId,
+          status: { in: ['pending', 'failed'] },
+        },
+      });
+
+      // Finally, delete the order
+      await tx.orders.delete({
+        where: { id: orderId },
+      });
+    });
+
+    return {
+      message: 'Order deleted successfully',
+      orderId,
+    };
   }
 }

@@ -5,6 +5,7 @@ import {
   Get,
   Param,
   Patch,
+  Delete,
   UseGuards,
   Query,
   Req,
@@ -154,6 +155,17 @@ export class FleetManagerController {
       dto,
     );
     req['responseMessage'] = 'Delivery partner updated successfully';
+    return result;
+  }
+
+  @Delete('delete-order/:orderId')
+  async deleteOrder(@Param('orderId') orderId: string, @Req() req: Request) {
+    const fleetManagerId = req.user['id'];
+    const result = await this.fleetManagerService.deleteOrder(
+      orderId,
+      fleetManagerId,
+    );
+    req['responseMessage'] = 'Order deleted successfully';
     return result;
   }
 }
