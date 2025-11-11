@@ -777,6 +777,43 @@ export class OrdersService {
       pausedDates: dates,
     };
   }
+
+  // Marks orders whose end_date is before the provided date (default: today) as completed.
+  // Also cleans up any future daily deliveries for those orders.
+  async completeExpiredOrders(referenceDate?: string) {
+    // Normalize to start of day for accurate "less than today" comparison
+    const ref = referenceDate ? new Date(referenceDate) : new Date();
+    ref.setHours(0, 0, 0, 0);
+
+    // Find candidates first so we can also delete their future deliveries
+    const candidates = await this.prisma.orders.findMany({
+      where: {
+        end_date: { lt: ref },
+        status: { in: ['pending', 'active', 'paused'] as any },
+      },
+      select: { id: true },
+    });
+
+    if (candidates.length === 0) {
+      return { updated: 0, deletedDeliveries: 0 };
+    }
+
+    const ids = candidates.map((o) => o.id);
+
+    const updateRes = await this.prisma.orders.updateMany({
+      where: { id: { in: ids } },
+      data: { status: 'completed' as any },
+    });
+
+    const deleteRes = await this.prisma.daily_deliveries.deleteMany({
+      where: {
+        order_id: { in: ids },
+        delivery_date: { gt: ref },
+      },
+    });
+
+    return { updated: updateRes.count, deletedDeliveries: deleteRes.count };
+  }
 }
 
 // Utility

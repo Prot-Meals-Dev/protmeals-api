@@ -121,6 +121,7 @@ export class DeliveryAssignmentsService {
             order_id: true,
             delevery_address: true,
             start_date: true,
+            remarks: true,
             location_url: true,
             end_date: true,
             amount: true,
