@@ -859,13 +859,6 @@ export class FleetManagerService {
       );
     }
 
-    // Only allow deletion of pending or cancelled orders
-    if (!['pending', 'cancelled'].includes(order.status)) {
-      throw new BadRequestException(
-        `Cannot delete order with status "${order.status}". Only pending or cancelled orders can be deleted.`,
-      );
-    }
-
     // Perform cascading deletion in a transaction
     await this.prisma.$transaction(async (tx) => {
       // Delete daily_deliveries
