@@ -5,8 +5,10 @@ import {
   DeliveryController,
   DeliveryCronService,
 } from './delivery-cron.service';
+import { OrdersModule } from 'src/orders/orders.module';
 
 @Module({
+  imports: [OrdersModule],
   controllers: [DeliveryAssignmentsController, DeliveryController],
   providers: [DeliveryCronService, DeliveryAssignmentsService],
 })

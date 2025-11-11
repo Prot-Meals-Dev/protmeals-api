@@ -90,4 +90,11 @@ export class OrdersController {
     const dates = body.dates.map((d) => new Date(d));
     return this.ordersService.pauseOrderOnDays(id, dates, userId);
   }
+
+  @Post('complete-expired')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'fleet_manager')
+  completeExpired(@Body('date') date?: string) {
+    return this.ordersService.completeExpiredOrders(date);
+  }
 }

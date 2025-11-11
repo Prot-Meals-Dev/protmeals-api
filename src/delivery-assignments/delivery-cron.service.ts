@@ -2,16 +2,23 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
 import { DateTime } from 'luxon';
 import { PrismaService } from 'src/prisma/prisma.service';
+import { OrdersService } from 'src/orders/orders.service';
 
 @Injectable()
 export class DeliveryCronService {
   private readonly logger = new Logger(DeliveryCronService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ordersService: OrdersService,
+  ) {}
 
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleDailyDeliveryGeneration() {
     const today = DateTime.now().toISODate(); // e.g., "2025-07-29"
+
+    // 0. Mark orders whose end_date has passed as completed
+    await this.ordersService.completeExpiredOrders(today);
 
     // 1. Mark expired coupons
     await this.expireOldCoupons(today);
@@ -19,7 +26,7 @@ export class DeliveryCronService {
     // 2. Generate daily deliveries (excluding paused orders)
     await this.generateDailyDeliveries(today);
 
-    this.logger.log(`Daily delivery and coupon expiry cron ran for ${today}`);
+    this.logger.log(`Daily cron ran for ${today}: completed expired orders, expired coupons, and generated deliveries`);
   }
 
   private async expireOldCoupons(today: string) {
