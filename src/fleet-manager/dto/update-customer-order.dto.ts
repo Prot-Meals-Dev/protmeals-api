@@ -37,4 +37,8 @@ export class UpdateCustomerOrderDto {
   @IsOptional()
   @IsNumber()
   amount?: number; // override amount if provided
+
+  @IsOptional()
+  @IsString()
+  location_url?: string;
 }
