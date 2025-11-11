@@ -1,4 +1,5 @@
-import { IsOptional, IsString } from 'class-validator';
+import { IsOptional, IsString, IsArray, IsDateString, IsNumber } from 'class-validator';
+import { MealPreferencesDto } from './create-customer-order.dto';
 
 export class UpdateCustomerOrderDto {
   @IsOptional()
@@ -20,4 +21,20 @@ export class UpdateCustomerOrderDto {
   @IsOptional()
   @IsString()
   remarks?: string;
+
+  // New updatable fields
+  @IsOptional()
+  @IsDateString()
+  end_date?: string;
+
+  @IsOptional()
+  meal_preferences?: MealPreferencesDto;
+
+  @IsOptional()
+  @IsArray()
+  recurring_days?: string[]; // e.g., ['mon', 'wed']
+
+  @IsOptional()
+  @IsNumber()
+  amount?: number; // override amount if provided
 }
