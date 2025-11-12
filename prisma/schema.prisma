@@ -283,6 +283,7 @@ enum order_status_enum {
   paused
   completed
   cancelled
+  renewed
 }
 
 enum delivery_item_status_enum {

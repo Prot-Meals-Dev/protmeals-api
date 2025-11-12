@@ -273,8 +273,8 @@ export class OrdersService {
       data: { status },
     });
 
-    // 🧹 Handle paused/cancelled/completed: delete future deliveries
-    if (['paused', 'cancelled', 'completed'].includes(status)) {
+    // 🧹 Handle paused/cancelled/completed/renewed: delete future deliveries
+    if (['paused', 'cancelled', 'completed', 'renewed'].includes(status as any)) {
       await this.prisma.daily_deliveries.deleteMany({
         where: {
           delivery_date: { gt: today },
@@ -320,6 +320,22 @@ export class OrdersService {
       newStatus: status,
       message: `Order status updated to ${status}`,
     };
+  }
+
+  async cancelOrder(id: string, userId: string) {
+    // Reuse existing status update logic and cleanup
+    return this.updateStatus(id, 'cancelled' as any, userId);
+  }
+
+  async renewOrder(id: string, userId: string) {
+    // Allow only if current status is completed
+    const order = await this.prisma.orders.findUnique({ where: { id } });
+    if (!order) throw new NotFoundException('Order not found');
+    if (order.status !== 'completed') {
+      throw new BadRequestException('Only completed orders can be marked as renewed');
+    }
+    // Mark as renewed (terminal like completed/cancelled)
+    return this.updateStatus(id, 'renewed' as any, userId);
   }
 
   async createOrder(data: CreateOrderDto) {
@@ -724,6 +740,15 @@ export class OrdersService {
       throw new ForbiddenException('Unauthorized access to this order');
     }
 
+    // Helper to normalize date to start of day for comparisons
+    const atStartOfDay = (d: Date) => {
+      const x = new Date(d);
+      x.setHours(0, 0, 0, 0);
+      return x;
+    };
+
+    let updatedEndDate: Date | undefined;
+
     // Use transaction to ensure atomicity and prevent duplication
     await this.prisma.$transaction(async (tx) => {
       // First, check if any of these dates are already paused to prevent duplication
@@ -749,7 +774,25 @@ export class OrdersService {
         return; // All dates are already paused
       }
 
-      // Delete daily deliveries for specified dates
+      // Read the most recent order dates inside the transaction to avoid race conditions
+      const current = await tx.orders.findUnique({
+        where: { id: orderId },
+        select: { start_date: true, end_date: true },
+      });
+      if (!current) {
+        throw new NotFoundException('Order not found');
+      }
+
+      const startDay = atStartOfDay(current.start_date);
+      const endDay = atStartOfDay(current.end_date);
+
+      // Only extend for pauses that fall within the original subscription window
+      const pausesWithinRange = newPauseDates.filter((d) => {
+        const dd = atStartOfDay(d);
+        return dd >= startDay && dd <= endDay;
+      });
+
+      // Delete daily deliveries for specified dates (safe even if some are out of range)
       await tx.daily_deliveries.deleteMany({
         where: {
           order_id: orderId,
@@ -770,11 +813,174 @@ export class OrdersService {
           data: pauseLogs,
         });
       }
+
+      // Extend end_date by number of valid paused days within range
+      if (pausesWithinRange.length > 0) {
+        const msPerDay = 24 * 60 * 60 * 1000;
+        const addMs = pausesWithinRange.length * msPerDay;
+        const newEnd = new Date(current.end_date.getTime() + addMs);
+        const updated = await tx.orders.update({
+          where: { id: orderId },
+          data: { end_date: newEnd },
+          select: { end_date: true },
+        });
+        updatedEndDate = updated.end_date;
+      }
     });
+
+    // Fetch updated end date if not set in transaction (e.g., no extension)
+    if (!updatedEndDate) {
+      const updated = await this.prisma.orders.findUnique({
+        where: { id: orderId },
+        select: { end_date: true },
+      });
+      updatedEndDate = updated?.end_date;
+    }
 
     return {
       message: `Order paused on ${dates.map((d) => d.toDateString()).join(', ')}`,
       pausedDates: dates,
+      new_end_date: updatedEndDate,
+    };
+  }
+
+  async unpauseOrderOnDays(orderId: string, dates: Date[], userId: string) {
+    const user = await this.prisma.users.findUnique({
+      where: { id: userId },
+      include: { role: true },
+    });
+
+    const initialOrder = await this.prisma.orders.findUnique({
+      where: { id: orderId },
+      include: { user: true },
+    });
+
+    if (!initialOrder) throw new NotFoundException('Order not found');
+
+    if (
+      user.role.name === 'fleet_manager' &&
+      initialOrder.user.region_id !== user.region_id
+    ) {
+      throw new ForbiddenException('Unauthorized access to this order');
+    }
+
+    const atStartOfDay = (d: Date) => {
+      const x = new Date(d);
+      x.setHours(0, 0, 0, 0);
+      return x;
+    };
+
+    let updatedEndDate: Date | undefined;
+
+    await this.prisma.$transaction(async (tx) => {
+      // Only consider dates that are currently paused (to avoid double-unpause)
+      const existingPauses = await tx.order_pauses.findMany({
+        where: {
+          order_id: orderId,
+          pause_date: { in: dates },
+        },
+      });
+
+      const pausedSet = new Set(existingPauses.map((p) => p.pause_date.toDateString()));
+      const unpauseDates = dates.filter((d) => pausedSet.has(d.toDateString()));
+
+      if (unpauseDates.length === 0) {
+        return; // Nothing to unpause
+      }
+
+      // Delete pause logs for those dates
+      await tx.order_pauses.deleteMany({
+        where: { order_id: orderId, pause_date: { in: unpauseDates } },
+      });
+
+      // Load current start/end to compute deduction safely
+      const current = await tx.orders.findUnique({
+        where: { id: orderId },
+        select: { start_date: true, end_date: true },
+      });
+      if (!current) throw new NotFoundException('Order not found');
+
+      const startDay = atStartOfDay(current.start_date);
+      const endDay = atStartOfDay(current.end_date);
+
+      // Only deduct for days within the subscription window
+      const validUnpause = unpauseDates.filter((d) => {
+        const dd = atStartOfDay(d);
+        return dd >= startDay && dd <= endDay;
+      });
+
+      if (validUnpause.length > 0) {
+        const msPerDay = 24 * 60 * 60 * 1000;
+        const newEndMs = current.end_date.getTime() - validUnpause.length * msPerDay;
+        let newEnd = new Date(newEndMs);
+        // Prevent end_date going before start_date
+        if (newEnd < current.start_date) newEnd = new Date(current.start_date);
+
+        const updated = await tx.orders.update({
+          where: { id: orderId },
+          data: { end_date: newEnd },
+          select: { end_date: true },
+        });
+        updatedEndDate = updated.end_date;
+      }
+    });
+
+    // Recreate daily deliveries for unpaused future dates when order is active and preferred weekday matches
+    const orderWithDetails = await this.prisma.orders.findUnique({
+      where: { id: orderId },
+      include: {
+        preferences: true,
+        assignments: true,
+      },
+    });
+
+    if (orderWithDetails) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const prefWeekdays = new Set(
+        (orderWithDetails.preferences || []).map((p) => p.week_day),
+      );
+
+      for (const date of dates) {
+        const d0 = atStartOfDay(date);
+        // Only generate back if future-or-today, within new window, and weekday is preferred
+        if (
+          updatedEndDate &&
+          d0 >= today &&
+          d0 <= updatedEndDate &&
+          prefWeekdays.has(d0.getDay())
+        ) {
+          for (const assignment of orderWithDetails.assignments) {
+            const exists = await this.prisma.daily_deliveries.findFirst({
+              where: {
+                delivery_date: d0,
+                order_id: orderId,
+                meal_type: assignment.meal_type,
+              },
+            });
+            if (!exists) {
+              await this.prisma.daily_deliveries.create({
+                data: {
+                  delivery_date: d0,
+                  delivery_assignments_id: assignment.id,
+                  user_id: orderWithDetails.user_id,
+                  meal_type: assignment.meal_type,
+                  delivery_partner_id: assignment.delivery_partner_id,
+                  order_id: orderId,
+                  sequence: assignment.sequence,
+                },
+              });
+            }
+          }
+        }
+      }
+    }
+
+    return {
+      message: `Order unpaused on ${dates.map((d) => d.toDateString()).join(', ')}`,
+      unpausedDates: dates,
+      new_end_date: updatedEndDate,
     };
   }
 

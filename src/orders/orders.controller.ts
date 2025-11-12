@@ -91,10 +91,39 @@ export class OrdersController {
     return this.ordersService.pauseOrderOnDays(id, dates, userId);
   }
 
+  @Patch(':id/cancel')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'fleet_manager')
+  cancelOrder(@Param('id') id: string, @Req() req: Request) {
+    const userId = req.user['id'];
+    return this.ordersService.cancelOrder(id, userId);
+  }
+
+  @Patch(':id/renew')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'fleet_manager')
+  renewOrder(@Param('id') id: string, @Req() req: Request) {
+    const userId = req.user['id'];
+    return this.ordersService.renewOrder(id, userId);
+  }
+
   @Post('complete-expired')
   @UseGuards(RolesGuard)
   @Roles('admin', 'fleet_manager')
   completeExpired(@Body('date') date?: string) {
     return this.ordersService.completeExpiredOrders(date);
+  }
+
+  @Patch(':id/unpause-days')
+  @UseGuards(RolesGuard)
+  @Roles('admin', 'fleet_manager')
+  unpauseOrderOnDays(
+    @Param('id') id: string,
+    @Body() body: { dates: string[] },
+    @Req() req: Request,
+  ) {
+    const userId = req.user['id'];
+    const dates = body.dates.map((d) => new Date(d));
+    return this.ordersService.unpauseOrderOnDays(id, dates, userId);
   }
 }
