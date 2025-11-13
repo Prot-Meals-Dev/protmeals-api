@@ -96,7 +96,6 @@ export class FleetManagerService {
     const baseWhere: Prisma.ordersWhereInput = {
       ...(status && { status: status as order_status_enum }),
       // If no specific status filter is provided, exclude paused orders by default
-      ...(!status && { status: { not: order_status_enum.paused } }),
       ...(startOfDay &&
         endOfDay && {
           start_date: { lte: endOfDay },
