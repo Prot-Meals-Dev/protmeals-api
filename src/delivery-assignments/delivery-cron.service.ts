@@ -16,20 +16,27 @@ export class DeliveryCronService {
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleDailyDeliveryGeneration() {
     const today = DateTime.now().toISODate(); // e.g., "2025-07-29"
+    await this.runDailyCron(today);
+  }
+
+  async runDailyCron(dateISO?: string) {
+    const target = dateISO || DateTime.now().toISODate();
 
     // 0. Mark orders whose end_date has passed as completed (yesterday and before)
-    await this.ordersService.completeExpiredOrders(today);
+    await this.ordersService.completeExpiredOrders(target);
 
     // 1. Mark expired coupons
-    await this.expireOldCoupons(today);
+    await this.expireOldCoupons(target);
 
     // 2. Generate daily deliveries (excluding paused orders)
-    await this.generateDailyDeliveries(today);
+    await this.generateDailyDeliveries(target);
 
     // 3. Immediately mark orders that end today as completed (after generating today's deliveries)
-    await this.ordersService.completeOrdersEndingOn(today);
+    await this.ordersService.completeOrdersEndingOn(target);
 
-    this.logger.log(`Daily cron ran for ${today}: completed expired orders, expired coupons, generated deliveries, and completed today's ending orders`);
+    this.logger.log(
+      `Daily cron ran for ${target}: completed expired orders, expired coupons, generated deliveries, and completed today's ending orders`,
+    );
   }
 
   private async expireOldCoupons(today: string) {
@@ -119,5 +126,14 @@ export class DeliveryController {
       message: `Daily deliveries generated for ${targetDate}`,
       result,
     };
+  }
+
+  @Post('cron/run')
+  async manualRunCron(@Body('date') date?: string) {
+    const targetDate = date
+      ? DateTime.fromISO(date).toISODate()
+      : DateTime.now().toISODate();
+    await this.deliveryCronService.runDailyCron(targetDate);
+    return { message: `Daily cron executed for ${targetDate}` };
   }
 }
