@@ -324,18 +324,18 @@ export class OrdersService {
 
   async cancelOrder(id: string, userId: string) {
     // Reuse existing status update logic and cleanup
-    return this.updateStatus(id, 'cancelled' as any, userId);
+    return this.updateStatus(id, order_status_enum.cancelled, userId);
   }
 
   async renewOrder(id: string, userId: string) {
     // Allow only if current status is completed
     const order = await this.prisma.orders.findUnique({ where: { id } });
     if (!order) throw new NotFoundException('Order not found');
-    if (order.status !== 'completed') {
+    if (order.status !== order_status_enum.completed) {
       throw new BadRequestException('Only completed orders can be marked as renewed');
     }
     // Mark as renewed (terminal like completed/cancelled)
-    return this.updateStatus(id, 'renewed' as any, userId);
+    return this.updateStatus(id, order_status_enum.renewed, userId);
   }
 
   async createOrder(data: CreateOrderDto) {
@@ -995,7 +995,7 @@ export class OrdersService {
     const candidates = await this.prisma.orders.findMany({
       where: {
         end_date: { lt: ref },
-        status: { in: ['pending', 'active', 'paused'] as any },
+        status: { in: [order_status_enum.pending, order_status_enum.active, order_status_enum.paused] },
       },
       select: { id: true },
     });
@@ -1008,7 +1008,7 @@ export class OrdersService {
 
     const updateRes = await this.prisma.orders.updateMany({
       where: { id: { in: ids } },
-      data: { status: 'completed' as any },
+      data: { status: order_status_enum.completed },
     });
 
     const deleteRes = await this.prisma.daily_deliveries.deleteMany({
@@ -1019,6 +1019,33 @@ export class OrdersService {
     });
 
     return { updated: updateRes.count, deletedDeliveries: deleteRes.count };
+  }
+
+  // Complete orders whose end_date is the provided date (on the day after generating deliveries)
+  async completeOrdersEndingOn(dateISO: string) {
+    const dayStart = new Date(dateISO);
+    dayStart.setHours(0, 0, 0, 0);
+    const nextDay = new Date(dayStart);
+    nextDay.setDate(nextDay.getDate() + 1);
+
+    const candidates = await this.prisma.orders.findMany({
+      where: {
+        end_date: { gte: dayStart, lt: nextDay },
+        status: { in: [order_status_enum.pending, order_status_enum.active, order_status_enum.paused] },
+      },
+      select: { id: true },
+    });
+
+    if (candidates.length === 0) return { updated: 0 };
+
+    const ids = candidates.map((o) => o.id);
+    const res = await this.prisma.orders.updateMany({
+      where: { id: { in: ids } },
+      data: { status: order_status_enum.completed },
+    });
+
+    // No need to delete future deliveries (there shouldn't be any beyond today)
+    return { updated: res.count };
   }
 }
 
